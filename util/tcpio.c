@@ -116,11 +116,15 @@ static int get_socket(char *host, char *port)
         if(sockfd < 0) continue;
         sockopt = 1;
         if(setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char*)&sockopt, sizeof(sockopt)) == -1) {
-            /* setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (char*)&sockopt, sizeof(sockopt)) */
-            close(sockopt);
-            warn("setsockopt");
+            close(sockfd);
+            warn("setsockopt TCP_NODELAY");
             continue;
         }
+        if(setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (char*)&sockopt, sizeof(sockopt)) == -1) {
+            close(sockfd);
+            warn("setsockopt SO_KEEPALIVE");
+            continue;
+        } 
         if(connect_retry(sockfd, ap->ai_addr, ap->ai_addrlen) < 0) {
             close(sockfd);
             warn("connect");
