@@ -209,6 +209,9 @@ ARCHITECTURE Behavioral OF top IS
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
   COMPONENT topmetal_simple
+    GENERIC (
+      TRIGGER_DELAY_WIDTH  : positive := 16
+    );
     PORT(
       RST                  : IN  std_logic;
       CLK                  : IN  std_logic;
@@ -221,11 +224,14 @@ ARCHITECTURE Behavioral OF top IS
       TRIGGER_CONTROL      : IN  std_logic;
       TRIGGER_RATE_CONTROL : IN  std_logic;
       TRIGGER_RATE         : IN  std_logic_vector (3 DOWNTO 0);
+      TRIGGER_DELAY        : IN  std_logic_vector (TRIGGER_DELAY_WIDTH-1 DOWNTO 0);
+      TRIGGER_OUT          : OUT std_logic;
       TM_CLK               : OUT std_logic;
       TM_RST               : OUT std_logic;
       TM_START             : OUT std_logic;
       TM_SPEAK             : OUT std_logic;
-      EX_RST               : OUT std_logic
+      EX_RST               : OUT std_logic;
+      EX_RST_VETO          : IN  std_logic
     );
   END COMPONENT;
   COMPONENT dac_inter8568
@@ -564,17 +570,20 @@ BEGIN
     SWG                  => config_reg(16*3-1-8 DOWNTO 16*2),
     BTN                  => tm_btn,
     MARKER_IN            => JC(2),
-    MARKER_OUT           => JD(3),
+    MARKER_OUT           => OPEN,
     STOP_CONTROL         => config_reg(16*4-1),
     STOP_ADDRESS         => config_reg(16*4-1-6 DOWNTO 16*3),
     TRIGGER_CONTROL      => config_reg(16*5-2),
     TRIGGER_RATE_CONTROL => config_reg(16*5-1),
     TRIGGER_RATE         => config_reg(16*5-1-12 DOWNTO 16*4),
+    TRIGGER_DELAY        => config_reg(16*7-1 DOWNTO 16*6),
+    TRIGGER_OUT          => JD(3),
     TM_CLK               => JC(5),
     TM_RST               => JD(0),
     TM_START             => JC(4),
     TM_SPEAK             => JC(0),
-    EX_RST               => JC(1)
+    EX_RST               => JC(1),
+    EX_RST_VETO          => config_reg(16*3-1)
   );
   tm_btn(6) <= config_reg(16*3-1-7);
   tm_btn(1) <= config_reg(16*3-1-6);

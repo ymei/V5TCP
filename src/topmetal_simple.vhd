@@ -28,6 +28,9 @@ LIBRARY UNISIM;
 USE UNISIM.VComponents.ALL;
 
 ENTITY topmetal_simple IS
+  GENERIC (
+    TRIGGER_DELAY_WIDTH  : positive := 16
+  );
   PORT (
     rst                  : IN  std_logic;
     clk                  : IN  std_logic;
@@ -40,11 +43,14 @@ ENTITY topmetal_simple IS
     trigger_control      : IN  std_logic;
     trigger_rate_control : IN  std_logic;
     trigger_rate         : IN  std_logic_vector (3 DOWNTO 0);
+    trigger_delay        : IN  std_logic_vector (TRIGGER_DELAY_WIDTH-1 DOWNTO 0);
+    trigger_out          : OUT std_logic;
     TM_CLK               : OUT std_logic;
     TM_RST               : OUT std_logic;
     TM_START             : OUT std_logic;
     TM_SPEAK             : OUT std_logic;
-    ex_rst               : OUT std_logic
+    ex_rst               : OUT std_logic;
+    ex_rst_veto          : IN  std_logic
   );
 END topmetal_simple;
 
@@ -67,22 +73,17 @@ ARCHITECTURE Behavioral OF topmetal_simple IS
   SIGNAL trigger_set         : std_logic;
   SIGNAL marker_buf_ext      : std_logic;
   SIGNAL marker_buf_ext_half : std_logic;
-
+  SIGNAL trigger_delay_cnt   : std_logic_vector(TRIGGER_DELAY_WIDTH-1 DOWNTO 0);
 
 BEGIN
 
-
-  ex_rst <= NOT ex_rst_buf;
---ex_rst<=BTN(6);
+  ex_rst <= (NOT ex_rst_buf) OR ex_rst_veto;
 
   PROCESS(rst, clk)
   BEGIN
     IF rst = '1' then
       clk_cnt <= (OTHERS => '0');
     ELSIF clk'event AND clk = '1' then
-
-
-
       clk_cnt <= clk_cnt+1;
     END IF;
   END PROCESS;
@@ -107,14 +108,14 @@ BEGIN
 
     ELSIF TM_CLK_buf'event AND TM_CLK_buf = '1' then
       TM_CLK_cnt <= TM_CLK_cnt+1;
-
       IF conv_integer(TM_CLK_cnt) = 64*64-1 THEN
         TM_CLK_cnt <= (OTHERS => '0');
-        frame_cnt  <= frame_cnt+1;
       END IF;
-
+      IF conv_integer(TM_CLK_cnt) = 48-2-2 THEN  -- push frame_cnt hence ex_rst earlier
+        frame_cnt <= frame_cnt+1;
+      END IF;
       BTN_buf <= BTN;
-      IF BTN_buf(0) = '0' and BTN(0) = '1' THEN  --issue start at rising edge of  BTN(0) 
+      IF BTN_buf(0) = '0' and BTN(0) = '1' THEN  --issue start at rising edge of BTN(0)
         started    <= '1';
         TM_START   <= '0';
         TM_SPEAK   <= '0';
@@ -137,11 +138,11 @@ BEGIN
         TM_SPEAK <= '0';
       END IF;
 
-
     END IF;
   END PROCESS;
 
-
+--ex_rst
+  
   PROCESS(rst, TM_CLK_buf)
   BEGIN
     IF rst = '1' then
@@ -149,11 +150,7 @@ BEGIN
       frame_trg     <= '0';
       ext_rst_cnt   <= (OTHERS => '0');
       ex_rst_buf    <= '0';
-
-
-    ELSIF TM_CLK_buf'event AND TM_CLK_buf = '1' then
-
-
+    ELSIF TM_CLK_buf'event AND TM_CLK_buf = '1' THEN 
       frame_trg_buf <= frame_cnt(conv_integer(SWG(7 DOWNTO 4)));
       IF frame_trg_buf = '0' and frame_cnt(conv_integer(SWG(7 downto 4))) = '1' THEN  --SWG high 4 bit for frames per ext_rst
         IF BTN(6) = '0' then  -- disable ext_reset by set BTN(6)=1
@@ -164,7 +161,7 @@ BEGIN
       ELSIF frame_trg = '1' then
         ext_rst_cnt <= ext_rst_cnt+1;
         ex_rst_buf  <= '1';
-        IF conv_integer(ext_rst_cnt) > 64*64 THEN  -- ext_reset 1024 *TM_CLK cycle
+        IF conv_integer(ext_rst_cnt) >= 64*64+1 THEN  -- ext_reset 1024 *TM_CLK cycle
           frame_trg <= '0';
         END IF;
       ELSE
@@ -173,22 +170,21 @@ BEGIN
     END IF;
   END PROCESS;
 
-
-
-
 --trigger 
 
   MARKER_OUT <= marker_buf_ext;
 
-
-
   PROCESS(rst, TM_CLK_buf)
+    VARIABLE triggered : std_logic := '0';
   BEGIN
     IF rst = '1' then
-      marker_buf_ext <= '0';
-      marker_cnt     <= (OTHERS => '0');
-      MARKER_IN_buf  <= '0';
-      trigger_set    <= '0';
+      marker_buf_ext    <= '0';
+      marker_cnt        <= (OTHERS => '0');
+      MARKER_IN_buf     <= '0';
+      trigger_set       <= '0';
+      trigger_delay_cnt <= (OTHERS => '0');
+      trigger_out       <= '0';
+      triggered         := '0';
     ELSIF TM_CLK_buf'event AND TM_CLK_buf = '1' then
       MARKER_IN_buf       <= ex_rst_buf;
       trigger_control_buf <= trigger_control;
@@ -201,12 +197,26 @@ BEGIN
       END IF;
       IF MARKER_IN_buf = '0' and ex_rst_buf = '1' THEN
         marker_cnt <= marker_cnt+1;
-        IF trigger_set = '1' then
-          marker_buf_ext <= '1';
-          trigger_set    <= '0';
+        IF trigger_set = '1' THEN
+          marker_buf_ext    <= '1';
+          trigger_set       <= '0';
+          triggered         := '1';
+          trigger_delay_cnt <= (OTHERS => '0');
         ELSE
           marker_buf_ext <= '0';
         END IF;
+      END IF;
+      IF triggered = '1' THEN
+        trigger_delay_cnt <= trigger_delay_cnt+1;
+        IF trigger_delay_cnt = trigger_delay THEN
+          trigger_out <= '1';
+          triggered   := '0';
+        ELSE
+          trigger_out <= '0';
+        END IF;
+      ELSE
+        trigger_out       <= '0';
+        trigger_delay_cnt <= (OTHERS => '0');
       END IF;
     END IF;
   END PROCESS;
