@@ -161,7 +161,7 @@ BEGIN
       ELSIF frame_trg = '1' then
         ext_rst_cnt <= ext_rst_cnt+1;
         ex_rst_buf  <= '1';
-        IF conv_integer(ext_rst_cnt) >= 64*64+1 THEN  -- ext_reset 1024 *TM_CLK cycle
+        IF conv_integer(ext_rst_cnt) >= 64*64+4 THEN  -- ext_reset 4096 * TM_CLK cycle
           frame_trg <= '0';
         END IF;
       ELSE
