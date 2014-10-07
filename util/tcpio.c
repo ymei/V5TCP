@@ -354,18 +354,22 @@ int main(int argc, char **argv)
     /* stop control and address */
     n = cmd_write_register(&buf32, 3, 0x0000);
     n = query_response(sockfd, buf, n, buf, 0);
-    /* trigger, rate control, low 4 bit controls number of resets between triggers */
+    /* (15) trigger rate control, (14) trigger control */
+    /* low 4 bit controls number of resets between triggers */
     /* 1 trigger every 2**((bit 3 downto 0)+1) resets */
-    n = cmd_write_register(&buf32, 4, 0x8003);
+    n = cmd_write_register(&buf32, 4, 0x8000);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* trigger delay, trigger_out at val+1 TM_CLK cycles after new frame starts */
+    n = cmd_write_register(&buf32, 6, 4100);
     n = query_response(sockfd, buf, n, buf, 0);
     /* btn(0) <> start, SWG, bit4-7 controls number of frames between resets */
     /* 1 reset every 2**((bit 7 downto 4)+1) frames, reset lasts one full frame */
     /* (bit 3 downto 0) controls TM_CLK, = f_CLK/2**((bit 3 downto 0)+1) */
-    n = cmd_write_register(&buf32, 2, 0x0470);
+    /* bit 15 (=1) vetos the output of EX_RST */
+    n = cmd_write_register(&buf32, 2, 0x040f);
     n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 2, 0x0070);
+    n = cmd_write_register(&buf32, 2, 0x000f);
     n = query_response(sockfd, buf, n, buf, 0);
-    
     stopTime = time(NULL);
 //    pthread_join(wTid, NULL);
 
