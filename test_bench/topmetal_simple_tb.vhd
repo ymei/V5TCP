@@ -132,7 +132,7 @@ BEGIN
    begin		
       -- hold reset state for 100 ns.
      rst <= '1';
-     SWG <= x"00";
+     SWG <= x"10";
      BTN <= "0000000";
      stop_control <= '0';
      stop_address <= (OTHERS => '0');

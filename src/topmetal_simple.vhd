@@ -111,7 +111,7 @@ BEGIN
       IF conv_integer(TM_CLK_cnt) = 64*64-1 THEN
         TM_CLK_cnt <= (OTHERS => '0');
       END IF;
-      IF conv_integer(TM_CLK_cnt) = 48-2-2 THEN  -- push frame_cnt hence ex_rst earlier
+      IF conv_integer(TM_CLK_cnt) = 63-2-2 THEN  -- push frame_cnt hence ex_rst earlier
         frame_cnt <= frame_cnt+1;
       END IF;
       BTN_buf <= BTN;
