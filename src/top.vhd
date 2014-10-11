@@ -230,8 +230,7 @@ ARCHITECTURE Behavioral OF top IS
       TM_RST               : OUT std_logic;
       TM_START             : OUT std_logic;
       TM_SPEAK             : OUT std_logic;
-      EX_RST               : OUT std_logic;
-      EX_RST_VETO          : IN  std_logic
+      EX_RST_n             : OUT std_logic
     );
   END COMPONENT;
   COMPONENT dac_inter8568
@@ -349,6 +348,8 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_btn                            : std_logic_vector(6 DOWNTO 0);
   SIGNAL tm_rst                            : std_logic;
   SIGNAL adc_refclk                        : std_logic;
+  SIGNAL tm_trig_out                       : std_logic;
+  SIGNAL tm_ex_rst_n                       : std_logic;
   ---------------------------------------------> Topmetal
   SIGNAL usr_data_output    : std_logic_vector (7 DOWNTO 0);
 
@@ -577,24 +578,25 @@ BEGIN
     TRIGGER_RATE_CONTROL => config_reg(16*5-1),
     TRIGGER_RATE         => config_reg(16*5-1-12 DOWNTO 16*4),
     TRIGGER_DELAY        => config_reg(16*7-1 DOWNTO 16*6),
-    TRIGGER_OUT          => JD(3),
+    TRIGGER_OUT          => tm_trig_out,
     TM_CLK               => JC(5),
     TM_RST               => JD(0),
     TM_START             => JC(4),
     TM_SPEAK             => JC(0),
-    EX_RST               => JC(1),
-    EX_RST_VETO          => config_reg(16*3-1)
+    EX_RST_n             => tm_ex_rst_n
   );
   tm_btn(6) <= config_reg(16*3-1-7);
   tm_btn(1) <= config_reg(16*3-1-6);
   tm_btn(0) <= config_reg(16*3-1-5);
   tm_rst    <= reset OR config_reg(16*1+8);
+  JD(3)     <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
+  JC(1)     <= tm_ex_rst_n OR config_reg(16*3-1);  -- ex_rst
   WITH config_reg(16*5+1 DOWNTO 16*5) SELECT
     adc_refclk <= JD(6) WHEN "01",      -- diff in, converted to single-ended
     JB(3)               WHEN "10",      -- pins on JB
     JB(7)               WHEN "11",      -- pins on JB
     clk_50MHz           WHEN OTHERS;
-
+  
   PROCESS (adc_refclk, reset)
   BEGIN
     IF reset = '1' then

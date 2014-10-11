@@ -343,16 +343,14 @@ int main(int argc, char **argv)
     }
     printf("\n");
 
-    n = cmd_write_register(&buf32, 1, 0x0001);
+    /* bit 0 sends DAC, bit 8 resets topmetal_simple module */
+    n = cmd_write_register(&buf32, 1, 0x0101);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_write_register(&buf32, 1, 0x0000);
     n = query_response(sockfd, buf, n, buf, 0);
 
     /* select clock source */
     n = cmd_write_register(&buf32, 5, 0x0003);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* stop control and address */
-    n = cmd_write_register(&buf32, 3, 0x0000);
     n = query_response(sockfd, buf, n, buf, 0);
     /* (15) trigger rate control, (14) trigger control */
     /* low 4 bit controls number of resets between triggers */
@@ -362,14 +360,24 @@ int main(int argc, char **argv)
     /* trigger delay, trigger_out at val+1 TM_CLK cycles after new frame starts */
     n = cmd_write_register(&buf32, 6, 4100);
     n = query_response(sockfd, buf, n, buf, 0);
-    /* btn(0) <> start, SWG, bit4-7 controls number of frames between resets */
+    /* bit10 starts TM, bit7~4 controls number of frames between resets */
     /* 1 reset every 2**((bit 7 downto 4)+1) frames, reset lasts one full frame */
     /* (bit 3 downto 0) controls TM_CLK, = f_CLK/2**((bit 3 downto 0)+1) */
-    /* bit 15 (=1) vetos the output of EX_RST */
-    n = cmd_write_register(&buf32, 2, 0x040f);
+    /* bit 15 (=1) vetos the output of EX_RST, bit 14 vetos trigger_out */
+    n = cmd_write_register(&buf32, 2, 0xc400);
     n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 2, 0x000f);
+    n = cmd_write_register(&buf32, 2, 0xc000);
     n = query_response(sockfd, buf, n, buf, 0);
+    /* bit 15 enables stop_control, bit (9 downto 0) sets the stop_address */
+    /* adress of 0xff will stop at pixel #238 (counting start from 0) */
+    Sleep(100);
+    n = cmd_write_register(&buf32, 3, 0x80f9);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* force a trigger */
+    Sleep(100);
+    n = cmd_send_pulse(&buf32, 0x01); /* pulse_reg(0) */
+    n = query_response(sockfd, buf, n, buf, 0);
+
     stopTime = time(NULL);
 //    pthread_join(wTid, NULL);
 

@@ -49,8 +49,7 @@ ENTITY topmetal_simple IS
     TM_RST               : OUT std_logic;
     TM_START             : OUT std_logic;
     TM_SPEAK             : OUT std_logic;
-    ex_rst               : OUT std_logic;
-    ex_rst_veto          : IN  std_logic
+    ex_rst_n             : OUT std_logic
   );
 END topmetal_simple;
 
@@ -77,7 +76,7 @@ ARCHITECTURE Behavioral OF topmetal_simple IS
 
 BEGIN
 
-  ex_rst <= (NOT ex_rst_buf) OR ex_rst_veto;
+  ex_rst_n <= NOT ex_rst_buf;
 
   PROCESS(rst, clk)
   BEGIN
