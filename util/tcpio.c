@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2014
+ * Copyright (c) 2013 - 2015
  *
  *     Yuan Mei
  *
@@ -277,7 +277,7 @@ end:
 int main(int argc, char **argv)
 {
     char buf[BUFSIZ];
-    uint32_t *buf32;
+    uint32_t *buf32, val;
     char *p, *outFileName, *scopeAddress, *scopePort;
     unsigned int v, c;
     int sockfd;
@@ -349,8 +349,45 @@ int main(int argc, char **argv)
     n = cmd_write_register(&buf32, 1, 0x0000);
     n = query_response(sockfd, buf, n, buf, 0);
 
+    /* DAC8568 for TopmetalII- */
+    /* turn on interal vref */
+    Sleep(1);
+    n = cmd_write_register(&buf32, 8, 0x0800);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 7, 0x0001);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* write and update output1 : DAC_EX_VREF */
+    Sleep(1);
+    val = (0x03<<24) | (0x00 << 20) | (32767 << 4);
+    n = cmd_write_register(&buf32, 8, (val & 0xffff0000)>>16);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 7, val & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* write and update output3 : 4BDAC_IB */
+    Sleep(1);
+    val = (0x03<<24) | (0x02 << 20) | (8965 << 4);
+    n = cmd_write_register(&buf32, 8, (val & 0xffff0000)>>16);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 7, val & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* write and update output5 : COL_IB */
+    Sleep(1);
+    val = (0x03<<24) | (0x04 << 20) | (12202 << 4);
+    n = cmd_write_register(&buf32, 8, (val & 0xffff0000)>>16);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 7, val & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    
     /* select clock source */
-    n = cmd_write_register(&buf32, 5, 0x0003);
+    n = cmd_write_register(&buf32, 5, 0x0000);
     n = query_response(sockfd, buf, n, buf, 0);
     /* (15) trigger rate control, (14) trigger control */
     /* low 4 bit controls number of resets between triggers */

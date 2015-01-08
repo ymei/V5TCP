@@ -246,6 +246,21 @@ ARCHITECTURE Behavioral OF top IS
       SYN   : OUT std_logic
     );
   END COMPONENT;
+  COMPONENT shiftreg_drive
+    GENERIC (
+      WIDTH   : positive := 32;           -- parallel data width
+      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
+    );
+    PORT(
+      CLK   : IN  std_logic;
+      RESET : IN  std_logic;
+      DATA  : IN  std_logic_vector(31 DOWNTO 0);
+      START : IN  std_logic;
+      SCLK  : OUT std_logic;
+      DOUT  : OUT std_logic;
+      SYNCn : OUT std_logic
+    );
+  END COMPONENT;
   ---------------------------------------------> Topmetal
   ---------------------------------------------< Chipscope
   COMPONENT cs_icon
@@ -552,17 +567,34 @@ BEGIN
     END IF;
   END PROCESS;
 
-  dac_inter8568_inst : dac_inter8568
-    PORT MAP(
-      RESET => NOT config_reg(16*1),
-      CLK   => dac_cnt(2),
-      DATAA => config_reg(15 DOWNTO 0),
-      DATAC => (OTHERS => '0'),
-      DATAE => (OTHERS => '0'),
-      DATAG => (OTHERS => '0'),
-      DIN   => JD(5),
+  -- on the 4-SMA driver board
+  --dac_inter8568_inst : dac_inter8568
+  --  PORT MAP(
+  --    RESET => NOT config_reg(16*1),
+  --    CLK   => dac_cnt(2),
+  --    DATAA => config_reg(15 DOWNTO 0),
+  --    DATAC => (OTHERS => '0'),
+  --    DATAE => (OTHERS => '0'),
+  --    DATAG => (OTHERS => '0'),
+  --    DIN   => JD(5),
+  --    SCLK  => JD(1),
+  --    SYN   => JD(4)
+  --  );
+
+  -- on the `bottom' board
+  dac8568_inst : shiftreg_drive
+    GENERIC MAP (
+      WIDTH   => 32,           -- parallel data width
+      CLK_DIV => 6             -- SCLK freq is CLK / 2**(CLK_DIV+1)
+    )
+    PORT MAP (
+      CLK   => control_clk,
+      RESET => tm_rst,
+      DATA  => config_reg(16*9-1 DOWNTO 16*7),
+      START => pulse_reg(1),
       SCLK  => JD(1),
-      SYN   => JD(4)
+      DOUT  => JD(0),
+      SYNCn => JD(2)
     );
 
   topmetal_simple_inst : topmetal_simple PORT MAP(
@@ -570,7 +602,7 @@ BEGIN
     CLK                  => adc_refclk,
     SWG                  => config_reg(16*3-1-8 DOWNTO 16*2),
     BTN                  => tm_btn,
-    MARKER_IN            => JC(2),
+    MARKER_IN            => JB(2),
     MARKER_OUT           => OPEN,
     STOP_CONTROL         => config_reg(16*4-1),
     STOP_ADDRESS         => config_reg(16*4-1-6 DOWNTO 16*3),
@@ -579,18 +611,18 @@ BEGIN
     TRIGGER_RATE         => config_reg(16*5-1-12 DOWNTO 16*4),
     TRIGGER_DELAY        => config_reg(16*7-1 DOWNTO 16*6),
     TRIGGER_OUT          => tm_trig_out,
-    TM_CLK               => JC(5),
-    TM_RST               => JD(0),
-    TM_START             => JC(4),
-    TM_SPEAK             => JC(0),
+    TM_CLK               => JB(5),
+    TM_RST               => JC(0),
+    TM_START             => JB(4),
+    TM_SPEAK             => JB(0),
     EX_RST_n             => tm_ex_rst_n
   );
   tm_btn(6) <= config_reg(16*3-1-7);
   tm_btn(1) <= config_reg(16*3-1-6);
   tm_btn(0) <= config_reg(16*3-1-5);
   tm_rst    <= reset OR config_reg(16*1+8);
-  JD(3)     <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
-  JC(1)     <= tm_ex_rst_n OR config_reg(16*3-1);  -- ex_rst
+  JC(3)     <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
+  JB(1)     <= tm_ex_rst_n OR config_reg(16*3-1);  -- ex_rst
   WITH config_reg(16*5+1 DOWNTO 16*5) SELECT
     adc_refclk <= JD(6) WHEN "01",      -- diff in, converted to single-ended
     JB(3)               WHEN "10",      -- pins on JB
