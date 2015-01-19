@@ -248,7 +248,7 @@ ARCHITECTURE Behavioral OF top IS
   END COMPONENT;
   COMPONENT shiftreg_drive
     GENERIC (
-      WIDTH   : positive := 32;           -- parallel data width
+      WIDTH   : positive :=32;            -- parallel data width
       CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
     );
     PORT(
@@ -365,6 +365,8 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL adc_refclk                        : std_logic;
   SIGNAL tm_trig_out                       : std_logic;
   SIGNAL tm_ex_rst_n                       : std_logic;
+  SIGNAL tm_sram_d                         : std_logic_vector(4 DOWNTO 0);
+  SIGNAL tm_sram_we                        : std_logic;
   ---------------------------------------------> Topmetal
   SIGNAL usr_data_output    : std_logic_vector (7 DOWNTO 0);
 
@@ -596,13 +598,34 @@ BEGIN
       DOUT  => JD(0),
       SYNCn => JD(2)
     );
-
+  -- topmetal internal DAC
+  topmetal_dac_inst : shiftreg_drive
+    GENERIC MAP (
+      WIDTH   => 32,           -- parallel data width
+      CLK_DIV => 10            -- SCLK freq is CLK / 2**(CLK_DIV+1)
+    )
+    PORT MAP (
+      CLK   => control_clk,
+      RESET => tm_rst,
+      DATA  => config_reg(16*11-1 DOWNTO 16*9),
+      START => pulse_reg(2),
+      SCLK  => JD(6),
+      DOUT  => JD(7),
+      SYNCn => OPEN
+    );
+  JD(3)<='0';  --DAC_VREF_MODE, 0 means using internal bandgap reference
+  --
+  JA(0)<='0';  --ADDR_GRST
+  JA(1)<=tm_sram_d(4); JA(5)<=tm_sram_d(3); JA(3)<=tm_sram_d(2); JA(6)<=tm_sram_d(1); JA(2)<=tm_sram_d(0);
+  JA(4)<=tm_sram_we;
+  tm_sram_d  <= (OTHERS => '0');
+  tm_sram_we <= '1';
   topmetal_simple_inst : topmetal_simple PORT MAP(
     RST                  => tm_rst,
     CLK                  => adc_refclk,
     SWG                  => config_reg(16*3-1-8 DOWNTO 16*2),
     BTN                  => tm_btn,
-    MARKER_IN            => JB(2),
+    MARKER_IN            => JC(2),
     MARKER_OUT           => OPEN,
     STOP_CONTROL         => config_reg(16*4-1),
     STOP_ADDRESS         => config_reg(16*4-1-6 DOWNTO 16*3),
@@ -612,8 +635,8 @@ BEGIN
     TRIGGER_DELAY        => config_reg(16*7-1 DOWNTO 16*6),
     TRIGGER_OUT          => tm_trig_out,
     TM_CLK               => JB(5),
-    TM_RST               => JC(0),
-    TM_START             => JB(4),
+    TM_RST               => JB(4),
+    TM_START             => JC(0),
     TM_SPEAK             => JB(0),
     EX_RST_n             => tm_ex_rst_n
   );
@@ -621,14 +644,15 @@ BEGIN
   tm_btn(1) <= config_reg(16*3-1-6);
   tm_btn(0) <= config_reg(16*3-1-5);
   tm_rst    <= reset OR config_reg(16*1+8);
+  JA(7)     <= tm_rst;                  -- reset of the chip
   JC(3)     <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
   JB(1)     <= tm_ex_rst_n OR config_reg(16*3-1);  -- ex_rst
   WITH config_reg(16*5+1 DOWNTO 16*5) SELECT
-    adc_refclk <= JD(6) WHEN "01",      -- diff in, converted to single-ended
+    adc_refclk <= JD(5) WHEN "01",      -- diff in, converted to single-ended
     JB(3)               WHEN "10",      -- pins on JB
     JB(7)               WHEN "11",      -- pins on JB
     clk_50MHz           WHEN OTHERS;
-  
+
   PROCESS (adc_refclk, reset)
   BEGIN
     IF reset = '1' then
