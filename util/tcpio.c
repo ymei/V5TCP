@@ -364,18 +364,18 @@ int main(int argc, char **argv)
     /* 1 reset every 2**((bit 7 downto 4)+1) frames, reset lasts one full frame */
     /* (bit 3 downto 0) controls TM_CLK, = f_CLK/2**((bit 3 downto 0)+1) */
     /* bit 15 (=1) vetos the output of EX_RST, bit 14 vetos trigger_out */
-    n = cmd_write_register(&buf32, 2, 0xc400);
+    n = cmd_write_register(&buf32, 2, 0xc400); /* set vetos here, but not bit7~0 */
     n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 2, 0xc000);
+    n = cmd_write_register(&buf32, 2, 0xc000); /* set both vetos and bit7~0 */
     n = query_response(sockfd, buf, n, buf, 0);
     /* bit 15 enables stop_control, bit (9 downto 0) sets the stop_address */
     /* adress of 0xff will stop at pixel #238 (counting start from 0) */
     Sleep(100);
-    n = cmd_write_register(&buf32, 3, 0x80f9);
+    n = cmd_write_register(&buf32, 3, 0x80d5);
     n = query_response(sockfd, buf, n, buf, 0);
     /* force a trigger */
     Sleep(100);
-    n = cmd_send_pulse(&buf32, 0x01); /* pulse_reg(0) */
+    n = cmd_send_pulse(&buf32, 0x01); // pulse_reg(0)
     n = query_response(sockfd, buf, n, buf, 0);
 
     stopTime = time(NULL);
