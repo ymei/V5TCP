@@ -208,42 +208,39 @@ ARCHITECTURE Behavioral OF top IS
   END COMPONENT;
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
-  COMPONENT topmetal_simple
+  COMPONENT topmetal_iiminus_analog
     GENERIC (
-      TRIGGER_DELAY_WIDTH  : positive := 16
+      ROWS          : positive := 72;   -- number of ROWS in the array
+      COLS          : positive := 72;   -- number of COLS in the ARRAY
+      CLK_DIV_WIDTH : positive := 16;
+      CONFIG_WIDTH  : positive := 16
     );
-    PORT(
-      RST                  : IN  std_logic;
-      CLK                  : IN  std_logic;
-      SWG                  : IN  std_logic_vector(7 DOWNTO 0);
-      BTN                  : IN  std_logic_vector(6 DOWNTO 0);
-      MARKER_IN            : IN  std_logic;
-      MARKER_OUT           : OUT std_logic;
-      STOP_CONTROL         : IN  std_logic;
-      STOP_ADDRESS         : IN  std_logic_vector(9 DOWNTO 0);
-      TRIGGER_CONTROL      : IN  std_logic;
-      TRIGGER_RATE_CONTROL : IN  std_logic;
-      TRIGGER_RATE         : IN  std_logic_vector (3 DOWNTO 0);
-      TRIGGER_DELAY        : IN  std_logic_vector (TRIGGER_DELAY_WIDTH-1 DOWNTO 0);
-      TRIGGER_OUT          : OUT std_logic;
-      TM_CLK               : OUT std_logic;
-      TM_RST               : OUT std_logic;
-      TM_START             : OUT std_logic;
-      TM_SPEAK             : OUT std_logic;
-      EX_RST_n             : OUT std_logic
-    );
-  END COMPONENT;
-  COMPONENT dac_inter8568
-    PORT(
-      RESET : IN  std_logic;
-      CLK   : IN  std_logic;
-      DATAA : IN  std_logic_vector(15 DOWNTO 0);
-      DATAC : IN  std_logic_vector(15 DOWNTO 0);
-      DATAE : IN  std_logic_vector(15 DOWNTO 0);
-      DATAG : IN  std_logic_vector(15 DOWNTO 0);
-      DIN   : OUT std_logic;
-      SCLK  : OUT std_logic;
-      SYN   : OUT std_logic
+    PORT (
+      CLK           : IN  std_logic;  -- clock, TM_CLK_S is derived from this one
+      RESET         : IN  std_logic;    -- reset
+      -- data input for writing to in-chip SRAM
+      MEM_CLK       : IN  std_logic;    -- connect to control_interface
+      MEM_WE        : IN  std_logic;
+      MEM_ADDR      : IN  std_logic_vector(31 DOWNTO 0);
+      MEM_DIN       : IN  std_logic_vector(31 DOWNTO 0);
+      SRAM_WR_START : IN  std_logic;  -- 1 MEM_CLK wide pulse to initiate in-chip SRAM write
+      -- configuration
+      CLK_DIV       : IN  std_logic_vector(3 DOWNTO 0);  -- log2(CLK_DIV_WIDTH), CLK/(2**CLK_DIV)
+      STOP_ADDR     : IN  std_logic_vector(CONFIG_WIDTH-1 DOWNTO 0);  --MSB enables
+      TRIGGER_RATE  : IN  std_logic_vector(CONFIG_WIDTH-1 DOWNTO 0);  --trigger every () frames
+      TRIGGER_DELAY : IN  std_logic_vector(CONFIG_WIDTH-1 DOWNTO 0);
+      -- input
+      MARKER_A      : IN  std_logic;
+      -- output
+      TRIGGER_OUT   : OUT std_logic;
+      --
+      SRAM_D        : OUT std_logic_vector(4 DOWNTO 0);
+      SRAM_WE       : OUT std_logic;
+      TM_RST        : OUT std_logic;    -- digital reset
+      TM_CLK_S      : OUT std_logic;
+      TM_RST_S      : OUT std_logic;
+      TM_START_S    : OUT std_logic;
+      TM_SPEAK_S    : OUT std_logic
     );
   END COMPONENT;
   COMPONENT shiftreg_drive
@@ -356,15 +353,14 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL control_mem_we                    : std_logic;
   SIGNAL control_mem_addr                  : std_logic_vector(31 DOWNTO 0);
   SIGNAL control_mem_din                   : std_logic_vector(31 DOWNTO 0);
+  SIGNAL control_mem_dout                  : std_logic_vector(31 DOWNTO 0);
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
   SIGNAL dac_cnt                           : unsigned(5 DOWNTO 0);
   SIGNAL led_cnt                           : unsigned(25 DOWNTO 0);
-  SIGNAL tm_btn                            : std_logic_vector(6 DOWNTO 0);
   SIGNAL tm_rst                            : std_logic;
   SIGNAL adc_refclk                        : std_logic;
   SIGNAL tm_trig_out                       : std_logic;
-  SIGNAL tm_ex_rst_n                       : std_logic;
   SIGNAL tm_sram_d                         : std_logic_vector(4 DOWNTO 0);
   SIGNAL tm_sram_we                        : std_logic;
   ---------------------------------------------> Topmetal
@@ -544,10 +540,10 @@ BEGIN
       PULSE_REG       => pulse_reg,
       STATUS_REG      => status_reg,
       -- Memory interface
-      MEM_WE          => OPEN,
-      MEM_ADDR        => OPEN,
-      MEM_DIN         => OPEN,
-      MEM_DOUT        => (OTHERS => '0'),
+      MEM_WE          => control_mem_we,
+      MEM_ADDR        => control_mem_addr,
+      MEM_DIN         => control_mem_din,
+      MEM_DOUT        => control_mem_dout,
       -- Data FIFO interface, FWFT
       DATA_FIFO_Q     => (OTHERS => '0'),
       DATA_FIFO_EMPTY => '0',
@@ -568,20 +564,6 @@ BEGIN
       dac_cnt <= dac_cnt + 1;
     END IF;
   END PROCESS;
-
-  -- on the 4-SMA driver board
-  --dac_inter8568_inst : dac_inter8568
-  --  PORT MAP(
-  --    RESET => NOT config_reg(16*1),
-  --    CLK   => dac_cnt(2),
-  --    DATAA => config_reg(15 DOWNTO 0),
-  --    DATAC => (OTHERS => '0'),
-  --    DATAE => (OTHERS => '0'),
-  --    DATAG => (OTHERS => '0'),
-  --    DIN   => JD(5),
-  --    SCLK  => JD(1),
-  --    SYN   => JD(4)
-  --  );
 
   -- on the `bottom' board
   dac8568_inst : shiftreg_drive
@@ -618,36 +600,44 @@ BEGIN
   JA(0)<='0';  --ADDR_GRST
   JA(1)<=tm_sram_d(4); JA(5)<=tm_sram_d(3); JA(3)<=tm_sram_d(2); JA(6)<=tm_sram_d(1); JA(2)<=tm_sram_d(0);
   JA(4)<=tm_sram_we;
-  tm_sram_d  <= (OTHERS => '0');
-  tm_sram_we <= '1';
-  topmetal_simple_inst : topmetal_simple PORT MAP(
-    RST                  => tm_rst,
-    CLK                  => adc_refclk,
-    SWG                  => config_reg(16*3-1-8 DOWNTO 16*2),
-    BTN                  => tm_btn,
-    MARKER_IN            => JC(2),
-    MARKER_OUT           => OPEN,
-    STOP_CONTROL         => config_reg(16*4-1),
-    STOP_ADDRESS         => config_reg(16*4-1-6 DOWNTO 16*3),
-    TRIGGER_CONTROL      => config_reg(16*5-2),
-    TRIGGER_RATE_CONTROL => config_reg(16*5-1),
-    TRIGGER_RATE         => config_reg(16*5-1-12 DOWNTO 16*4),
-    TRIGGER_DELAY        => config_reg(16*7-1 DOWNTO 16*6),
-    TRIGGER_OUT          => tm_trig_out,
-    TM_CLK               => JB(5),
-    TM_RST               => JB(4),
-    TM_START             => JC(0),
-    TM_SPEAK             => JB(0),
-    EX_RST_n             => tm_ex_rst_n
-  );
-  tm_btn(6) <= config_reg(16*3-1-7);
-  tm_btn(1) <= config_reg(16*3-1-6);
-  tm_btn(0) <= config_reg(16*3-1-5);
-  tm_rst    <= reset OR config_reg(16*1+8);
-  JA(7)     <= tm_rst;                  -- reset of the chip
-  JC(3)     <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
-  JB(1)     <= tm_ex_rst_n OR config_reg(16*3-1);  -- ex_rst
-  WITH config_reg(16*5+1 DOWNTO 16*5) SELECT
+  topmetal_iiminus_analog_inst : topmetal_iiminus_analog
+    GENERIC MAP (
+      ROWS          => 72,              -- number of ROWS in the array
+      COLS          => 72,              -- number of COLS in the ARRAY
+      CLK_DIV_WIDTH => 16,
+      CONFIG_WIDTH  => 16
+    )
+    PORT MAP (
+      CLK           => adc_refclk,  -- clock, TM_CLK_S is derived from this one
+      RESET         => tm_rst,      -- reset
+      -- data input for writing to in-chip SRAM
+      MEM_CLK       => control_clk,
+      MEM_WE        => control_mem_we,
+      MEM_ADDR      => control_mem_addr,
+      MEM_DIN       => control_mem_din,
+      SRAM_WR_START => pulse_reg(3),  -- 1 MEM_CLK wide pulse to initiate in-chip SRAM write
+      -- configuration
+      CLK_DIV       => config_reg(16*2+3 DOWNTO 16*2),  -- log2(CLK_DIV_WIDTH), CLK/(2**CLK_DIV)
+      STOP_ADDR     => config_reg(16*4-1 DOWNTO 16*3),  -- MSB enables
+      TRIGGER_RATE  => config_reg(16*6-1 DOWNTO 16*5),  -- trigger every () frames
+      TRIGGER_DELAY => config_reg(16*5-1 DOWNTO 16*4),
+      -- input
+      MARKER_A      => JC(2),
+      -- output
+      TRIGGER_OUT   => tm_trig_out,
+      --
+      SRAM_D        => tm_sram_d,
+      SRAM_WE       => tm_sram_we,
+      TM_RST        => JA(7),           -- digital reset
+      TM_CLK_S      => JB(5),
+      TM_RST_S      => JB(4),
+      TM_START_S    => JC(0),
+      TM_SPEAK_S    => JB(0)
+    );
+  tm_rst <= reset OR config_reg(16*1+8);
+  JC(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
+  JB(1)  <= config_reg(16*3-1);         -- ex_rst
+  WITH config_reg(16*6+1 DOWNTO 16*6) SELECT
     adc_refclk <= JD(5) WHEN "01",      -- diff in, converted to single-ended
     JB(3)               WHEN "10",      -- pins on JB
     JB(7)               WHEN "11",      -- pins on JB

@@ -327,7 +327,7 @@ int main(int argc, char **argv)
 
     buf32 = (uint32_t*)buf;
 
-    /* dac value */
+    /* dac value, for usage demo, not in effect */
     // n = cmd_write_register(&buf32, 0, 40632); // 3.1V
     n = cmd_write_register(&buf32, 0, 32768); // 2.5V
     // n = cmd_read_register(&buf32, 3);
@@ -342,12 +342,6 @@ int main(int argc, char **argv)
         printf("%02x ", (unsigned char)buf[i]);
     }
     printf("\n");
-
-    /* bit 0 sends DAC (old mwang's module, not in use), bit 8 resets topmetal_simple module */
-    n = cmd_write_register(&buf32, 1, 0x0101);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 1, 0x0000);
-    n = query_response(sockfd, buf, n, buf, 0);
 
     /* DAC8568 for TopmetalII- */
     /* turn on internal vref = 2.5V, so the output is val/65536.0 * 5.0 [V] */
@@ -379,7 +373,7 @@ int main(int argc, char **argv)
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output5 : COL_IB */
     Sleep(1);
-    val = (0x03<<24) | (0x04 << 20) | (DACVolt(0.931) << 4);
+    val = (0x03<<24) | (0x04 << 20) | (DACVolt(1.0) << 4);
     n = cmd_write_register(&buf32, 8, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_write_register(&buf32, 7, val & 0xffff);
@@ -437,30 +431,33 @@ int main(int argc, char **argv)
 #undef DACVolt
 
     /* select clock source */
-    n = cmd_write_register(&buf32, 5, 0x0000);
+    n = cmd_write_register(&buf32, 6, 0x0000);
     n = query_response(sockfd, buf, n, buf, 0);
-    /* (15) trigger rate control, (14) trigger control */
-    /* low 4 bit controls number of resets between triggers */
-    /* 1 trigger every 2**((bit 3 downto 0)+1) resets */
-    n = cmd_write_register(&buf32, 4, 0xc000);
+    /* trigger rate control, 1 trigger every val frames */
+    n = cmd_write_register(&buf32, 5, 0x0001);
     n = query_response(sockfd, buf, n, buf, 0);
-    /* trigger delay, trigger_out at val+1 TM_CLK cycles after new frame starts */
-    n = cmd_write_register(&buf32, 6, 4100);
+    /* trigger delay, trigger_out at val TM_CLK cycles after new frame starts */
+    n = cmd_write_register(&buf32, 4, 0x0000);
     n = query_response(sockfd, buf, n, buf, 0);
-    /* bit10 starts TM, bit7~4 controls number of frames between resets */
-    /* 1 reset every 2**((bit 7 downto 4)+1) frames, reset lasts one full frame */
-    /* (bit 3 downto 0) controls TM_CLK, = f_CLK/2**((bit 3 downto 0)+1) */
-    /* bit 15 (=1) vetos the output of EX_RST, bit 14 vetos trigger_out */
-    n = cmd_write_register(&buf32, 2, 0x8403);
+    /* (bit 3 downto 0) controls TM_CLK = f_CLK/2**(bit 3 downto 0) */
+    /* bit 15 sets the output of EX_RST, bit 14 vetos trigger_out */
+    n = cmd_write_register(&buf32, 2, 0x0001);
     n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 2, 0x8003);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* bit 15 enables stop_control, bit (9 downto 0) sets the stop_address */
-    /* adress of 0xff will stop at pixel #238 (counting start from 0) */
-    Sleep(100);
+    /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
     n = cmd_write_register(&buf32, 3, 0x00f9);
     n = query_response(sockfd, buf, n, buf, 0);
-    /* force a trigger */
+    /* bit 8 [high] resets topmetal_iiminus_analog module */
+    n = cmd_write_register(&buf32, 1, 0x0100);
+    n = query_response(sockfd, buf, n, buf, 0);
+    Sleep(1);
+    n = cmd_write_register(&buf32, 1, 0x0000);
+    n = query_response(sockfd, buf, n, buf, 0);
+
+    /* write sram */
+    n = cmd_send_pulse(&buf32, 0x08); /* pulse_reg(3) */
+    n = query_response(sockfd, buf, n, buf, 0);
+
+/* force a trigger */
     // Sleep(100);
     // n = cmd_send_pulse(&buf32, 0x01); /* pulse_reg(0) */
     // n = query_response(sockfd, buf, n, buf, 0);
