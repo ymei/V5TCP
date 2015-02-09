@@ -569,7 +569,7 @@ BEGIN
   dac8568_inst : shiftreg_drive
     GENERIC MAP (
       WIDTH   => 32,           -- parallel data width
-      CLK_DIV => 6             -- SCLK freq is CLK / 2**(CLK_DIV+1)
+      CLK_DIV => 8             -- SCLK freq is CLK / 2**(CLK_DIV+1)
     )
     PORT MAP (
       CLK   => control_clk,

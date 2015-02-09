@@ -390,16 +390,17 @@ int main(int argc, char **argv)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* TopmetalII- internal DAC */
+#if 0
     Sleep(1);
     /*    ARST_VREF    VR8B          CSA_VREF */
-//    val = (0x4f<<16) | (0xfc << 8) | (0x34);
-    val = 0xffffffff;
+    val = (0x4f<<16) | (0xfc << 8) | (0x34);
     n = cmd_write_register(&buf32, 10, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_write_register(&buf32, 9, val & 0xffff);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x04); /* pulse_reg(2) */
     n = query_response(sockfd, buf, n, buf, 0);
+#endif
     /* use external DAC to set bias */
     /* write and update output4 : VR8B */
     Sleep(1);
@@ -421,17 +422,18 @@ int main(int argc, char **argv)
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output8 : CSA_VREF */
     Sleep(1);
-    val = (0x03<<24) | (0x07 << 20) | (DACVolt(0.612) << 4);
+    val = (0x03<<24) | (0x07 << 20) | (DACVolt(0.650) << 4);
     n = cmd_write_register(&buf32, 8, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_write_register(&buf32, 7, val & 0xffff);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
+    Sleep(1);
 #undef DACVolt
 
     /* select clock source */
-    n = cmd_write_register(&buf32, 6, 0x0000);
+    n = cmd_write_register(&buf32, 6, 0x0002);
     n = query_response(sockfd, buf, n, buf, 0);
     /* trigger rate control, 1 trigger every val frames */
     n = cmd_write_register(&buf32, 5, 0x0001);
@@ -444,7 +446,7 @@ int main(int argc, char **argv)
     n = cmd_write_register(&buf32, 2, 0x0001);
     n = query_response(sockfd, buf, n, buf, 0);
     /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
-    n = cmd_write_register(&buf32, 3, 0x00f9);
+    n = cmd_write_register(&buf32, 3, 0x0003);
     n = query_response(sockfd, buf, n, buf, 0);
     /* bit 8 [high] resets topmetal_iiminus_analog module */
     n = cmd_write_register(&buf32, 1, 0x0100);
