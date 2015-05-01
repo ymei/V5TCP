@@ -576,9 +576,9 @@ BEGIN
       RESET => tm_rst,
       DATA  => config_reg(16*9-1 DOWNTO 16*7),
       START => pulse_reg(1),
-      SCLK  => JD(1),
-      DOUT  => JD(0),
-      SYNCn => JD(2)
+      SCLK  => JD(5),
+      DOUT  => JD(4),
+      SYNCn => JD(6)
     );
   -- topmetal internal DAC
   topmetal_dac_inst : shiftreg_drive
@@ -591,15 +591,15 @@ BEGIN
       RESET => tm_rst,
       DATA  => config_reg(16*11-1 DOWNTO 16*9),
       START => pulse_reg(2),
-      SCLK  => JD(6),
-      DOUT  => JD(7),
+      SCLK  => JD(2),
+      DOUT  => JD(3),
       SYNCn => OPEN
     );
-  JD(3)<='0';  --DAC_VREF_MODE, 0 means using internal bandgap reference
+  JD(7)<='0';  --DAC_VREF_MODE, 0 means using internal bandgap reference
   --
-  JA(0)<='0';  --ADDR_GRST
-  JA(1)<=tm_sram_d(4); JA(5)<=tm_sram_d(3); JA(3)<=tm_sram_d(2); JA(6)<=tm_sram_d(1); JA(2)<=tm_sram_d(0);
-  JA(4)<=tm_sram_we;
+  JC(4)<='0';  --ADDR_GRST
+  JC(5)<=tm_sram_d(4); JC(1)<=tm_sram_d(3); JC(7)<=tm_sram_d(2); JC(2)<=tm_sram_d(1); JC(6)<=tm_sram_d(0);
+  JC(0)<=tm_sram_we;
   topmetal_iiminus_analog_inst : topmetal_iiminus_analog
     GENERIC MAP (
       ROWS          => 72,              -- number of ROWS in the array
@@ -622,25 +622,26 @@ BEGIN
       TRIGGER_RATE  => config_reg(16*6-1 DOWNTO 16*5),  -- trigger every () frames
       TRIGGER_DELAY => config_reg(16*5-1 DOWNTO 16*4),
       -- input
-      MARKER_A      => JC(2),
+      MARKER_A      => JB(6),
       -- output
       TRIGGER_OUT   => tm_trig_out,
       --
       SRAM_D        => tm_sram_d,
       SRAM_WE       => tm_sram_we,
-      TM_RST        => JA(7),           -- digital reset
-      TM_CLK_S      => JB(5),
-      TM_RST_S      => JB(4),
-      TM_START_S    => JC(0),
-      TM_SPEAK_S    => JB(0)
+      TM_RST        => JC(3),           -- digital reset
+      TM_CLK_S      => JB(1),
+      TM_RST_S      => JB(5),
+      TM_START_S    => JB(0),
+      TM_SPEAK_S    => JB(4)
     );
   tm_rst <= reset OR config_reg(16*1+8);
-  JC(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
-  JB(1)  <= config_reg(16*3-1);         -- ex_rst
+  JB(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
+  JA(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- replica
+  JB(7)  <= config_reg(16*3-1);         -- ex_rst
   WITH config_reg(16*6+1 DOWNTO 16*6) SELECT
-    adc_refclk <= JD(5) WHEN "01",      -- diff in, converted to single-ended
-    JB(3)               WHEN "10",      -- pins on JB
-    JB(7)               WHEN "11",      -- pins on JB
+    adc_refclk <= JB(2) WHEN "01",      -- optocoupler isolated
+    JA(7)               WHEN "10",      -- pins on JA
+    JD(1)               WHEN "11",      -- pins on JD
     clk_50MHz           WHEN OTHERS;
 
   PROCESS (adc_refclk, reset)
