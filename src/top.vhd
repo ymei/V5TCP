@@ -233,17 +233,24 @@ ARCHITECTURE Behavioral OF top IS
       EX_RST_n             : OUT std_logic
     );
   END COMPONENT;
-  COMPONENT dac_inter8568
-    PORT(
-      RESET : IN  std_logic;
-      CLK   : IN  std_logic;
-      DATAA : IN  std_logic_vector(15 DOWNTO 0);
-      DATAC : IN  std_logic_vector(15 DOWNTO 0);
-      DATAE : IN  std_logic_vector(15 DOWNTO 0);
-      DATAG : IN  std_logic_vector(15 DOWNTO 0);
-      DIN   : OUT std_logic;
-      SCLK  : OUT std_logic;
-      SYN   : OUT std_logic
+  COMPONENT fifo2shiftreg
+    GENERIC (
+      WIDTH   : positive := 32;         -- parallel data width
+      CLK_DIV : positive := 2           -- SCLK freq is CLK / 2**(CLK_DIV)
+    );
+    PORT (
+      CLK      : IN  std_logic;         -- clock
+      RESET    : IN  std_logic;         -- reset
+      -- input data interface
+      WR_CLK   : IN  std_logic;         -- FIFO write clock
+      DIN      : IN  std_logic_vector(15 DOWNTO 0);
+      WR_EN    : IN  std_logic;
+      WR_PULSE : IN  std_logic;  -- one pulse writes one word, regardless of pulse duration
+      FULL     : OUT std_logic;
+      -- output
+      SCLK     : OUT std_logic;
+      DOUT     : OUT std_logic;
+      SYNCn    : OUT std_logic
     );
   END COMPONENT;
   ---------------------------------------------> Topmetal
@@ -552,20 +559,27 @@ BEGIN
     END IF;
   END PROCESS;
 
-  dac_inter8568_inst : dac_inter8568
-    PORT MAP(
-      RESET => NOT config_reg(16*1),
-      CLK   => dac_cnt(2),
-      DATAA => config_reg(15 DOWNTO 0),
-      DATAC => (OTHERS => '0'),
-      DATAE => (OTHERS => '0'),
-      DATAG => (OTHERS => '0'),
-      DIN   => JD(5),
-      SCLK  => JD(1),
-      SYN   => JD(4)
+  dac8568_inst : fifo2shiftreg
+    GENERIC MAP (
+      WIDTH   => 32,                    -- parallel data width
+      CLK_DIV => 2                      -- SCLK freq is CLK / 2**(CLK_DIV)
+    )
+    PORT MAP (
+      CLK      => control_clk,          -- clock
+      RESET    => tm_rst,               -- reset
+      -- input data interface
+      WR_CLK   => control_clk,          -- FIFO write clock
+      DIN      => config_reg(15 DOWNTO 0),
+      WR_EN    => '0',
+      WR_PULSE => pulse_reg(1),  -- one pulse writes one word, regardless of pulse duration
+      FULL     => OPEN,
+      -- output
+      SCLK     => JD(1),
+      DOUT     => JD(5),
+      SYNCn    => JD(4)
     );
 
-  topmetal_simple_inst : topmetal_simple PORT MAP(
+  topmetal_simple_inst : topmetal_simple PORT MAP (
     RST                  => tm_rst,
     CLK                  => adc_refclk,
     SWG                  => config_reg(16*3-1-8 DOWNTO 16*2),
