@@ -42,7 +42,7 @@ ARCHITECTURE behavior OF shiftreg_drive_tb IS
   COMPONENT shiftreg_drive
     GENERIC (
       WIDTH   : positive := 32;           -- parallel data width
-      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV)
+      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
     );    
     PORT(
       CLK   : IN  std_logic;
@@ -89,10 +89,11 @@ ARCHITECTURE behavior OF shiftreg_drive_tb IS
   SIGNAL START : std_logic                     := '0';
 
   --Outputs
-  SIGNAL BUSY  : std_logic;  
-  SIGNAL SCLK  : std_logic;
-  SIGNAL DOUT  : std_logic;
-  SIGNAL SYNCn : std_logic;
+  SIGNAL BUSY     : std_logic;
+  SIGNAL sclk_buf : std_logic;
+  SIGNAL SCLK     : std_logic;
+  SIGNAL DOUT     : std_logic;
+  SIGNAL SYNCn    : std_logic;
 
   -- internals
   SIGNAL wr_start   : std_logic := '0';
@@ -115,7 +116,7 @@ BEGIN
     DATA  => DATA,
     START => START,
     BUSY  => BUSY,
-    SCLK  => SCLK,
+    SCLK  => sclk_buf,
     DOUT  => DOUT,
     SYNCn => SYNCn
   );
@@ -133,6 +134,7 @@ BEGIN
       EMPTY  => fifo_empty
     );
 
+  SCLK       <= NOT sclk_buf;
   START      <= NOT fifo_empty;
   fifo_rd_en <= NOT BUSY;
 

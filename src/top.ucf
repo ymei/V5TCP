@@ -251,6 +251,11 @@ NET "JD<7>" LOC = "AK8"  | IOSTANDARD = LVCMOS33;   # BANK = 22,  Pin name = IO_
 NET "JB<7>" CLOCK_DEDICATED_ROUTE = FALSE;
 #>-- PMOD Connectors -->
 #<-- onboard VHDCI --<
+Net "VHDCI1P<5>" TNM_NET = ADC_ADCLK0;
+TIMESPEC "TS_ADC_ADCLK0" = PERIOD "ADC_ADCLK0" 65 MHz HIGH 50 %;
+Net "VHDCI1P<7>" TNM_NET = ADC_LCLK0;
+TIMESPEC "TS_ADC_LCLK0" = PERIOD "ADC_LCLK0" 390 MHz HIGH 50 %;
+
 # VHDCI_1
 NET "VHDCI1P<0>"  LOC = "B32";  # BANK = 11, Pin name = IO_L0P_11,           Sch name = EXP-IO1_P
 NET "VHDCI1P<1>"  LOC = "C32";  # BANK = 11, Pin name = IO_L2P_11,           Sch name = EXP-IO2_P

@@ -8,9 +8,11 @@
 -- Project Name: 
 -- Target Devices: 
 -- Tool versions: 
--- Description: 
+-- Description:    By default the falling edge of SCLK is aligned at the center
+--                 of DOUT.  Invert SCLK ouput when necessary.  MSB of DATA is
+--                 shifted out first.
 --
--- Dependencies: 
+-- dependencies: 
 --
 -- Revision: 
 -- Revision 0.01 - File Created
@@ -32,7 +34,7 @@ USE UNISIM.VComponents.ALL;
 ENTITY shiftreg_drive IS
   GENERIC (
     WIDTH   : positive := 32;           -- parallel data width
-    CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV)
+    CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
   );
   PORT (
     CLK   : IN  std_logic;              -- clock
@@ -72,7 +74,7 @@ BEGIN
       clk_cnt <= clk_cnt + 1;
     END IF;
   END PROCESS clk_proc;
-  sclk_buf <= clk_cnt(CLK_DIV-1);
+  sclk_buf <= clk_cnt(CLK_DIV);
 
   data_proc : PROCESS (CLK, RESET)
   BEGIN
@@ -84,16 +86,16 @@ BEGIN
       CASE driveState IS
         WHEN S0 =>
           sync_n_buf <= '1';
-          IF START = '1' THEN
+          IF START = '1' THEN           -- START is level triggered
             BUSY       <= '1';
-            data_reg   <= DATA;          -- register DATA
+            data_reg   <= DATA;         -- register DATA
             data_pos   <= WIDTH;
             driveState <= S1;
           END IF;
 
         WHEN S1 =>
           driveState <= S1;
-          IF clk_cnt = clk_cnt_p-1 THEN  -- rising_edge of sclk
+          IF clk_cnt = clk_cnt_p-1 THEN -- rising_edge of sclk
             sync_n_buf <= '0';
             IF data_pos > 0 THEN 
               dout_buf <= data_reg(data_pos-1);

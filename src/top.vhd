@@ -31,6 +31,8 @@ USE ieee.numeric_std.ALL;
 LIBRARY UNISIM;
 USE UNISIM.VComponents.ALL;
 
+USE work.common_pkg.ALL;
+
 ENTITY top IS
   GENERIC (
     includeChipscope : boolean := true
@@ -254,6 +256,35 @@ ARCHITECTURE Behavioral OF top IS
     );
   END COMPONENT;
   ---------------------------------------------> Topmetal
+  ---------------------------------------------< ADC
+  COMPONENT ads5282_interface
+    GENERIC (
+      ADC_NCH : positive := 8
+    );
+    PORT (
+      RESET   : IN  std_logic;
+      CLK     : IN  std_logic;
+      --
+      CONFIG  : IN  std_logic_vector(31 DOWNTO 0);
+      CONFPS  : IN  std_logic;
+      CONFULL : OUT std_logic;
+      --
+      ADCLKp  : IN  std_logic;          -- LVDS frame clock (1X)
+      ADCLKn  : IN  std_logic;
+      LCLKp   : IN  std_logic;          -- LVDS bit clock (6X)
+      LCLKn   : IN  std_logic;
+      DATAp   : IN  std_logic_vector(ADC_NCH-1 DOWNTO 0);
+      DATAn   : IN  std_logic_vector(ADC_NCH-1 DOWNTO 0);
+      --
+      ADCLK   : OUT std_logic;
+      DATA    : OUT ADS5282DATA(ADC_NCH-1 DOWNTO 0);
+      --
+      SCLK    : OUT std_logic;
+      SDATA   : OUT std_logic;
+      CSn     : OUT std_logic
+    );
+  END COMPONENT;
+  ---------------------------------------------> ADC
   ---------------------------------------------< Chipscope
   COMPONENT cs_icon
     PORT (
@@ -358,6 +389,14 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_trig_out                       : std_logic;
   SIGNAL tm_ex_rst_n                       : std_logic;
   ---------------------------------------------> Topmetal
+  ---------------------------------------------< ADC
+  SIGNAL ads5282_0_data_p : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_0_data_n : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_0_adclk  : std_logic;
+  SIGNAL ads5282_0_data   : ADS5282DATA(7 DOWNTO 0);
+  SIGNAL ads5282_0_config : std_logic_vector(31 DOWNTO 0);
+  SIGNAL ads5282_0_confps : std_logic;  
+  ---------------------------------------------> ADC
   SIGNAL usr_data_output    : std_logic_vector (7 DOWNTO 0);
 
 BEGIN
@@ -562,7 +601,7 @@ BEGIN
   dac8568_inst : fifo2shiftreg
     GENERIC MAP (
       WIDTH   => 32,                    -- parallel data width
-      CLK_DIV => 2                      -- SCLK freq is CLK / 2**(CLK_DIV)
+      CLK_DIV => 2                      -- SCLK freq is CLK / 2**(CLK_DIV+1)
     )
     PORT MAP (
       CLK      => control_clk,          -- clock
@@ -621,6 +660,42 @@ BEGIN
   END PROCESS;
   usr_data_output(3 DOWNTO 0) <= std_logic_vector(led_cnt(25 DOWNTO 22));
   ---------------------------------------------> Topmetal
+  ---------------------------------------------< ADC
+  ads5282_interface_inst : ads5282_interface
+    GENERIC MAP (
+      ADC_NCH => 8
+    )
+    PORT MAP (
+      RESET   => reset,
+      CLK     => control_clk,
+      --
+      CONFIG  => ads5282_0_config,
+      CONFPS  => ads5282_0_confps,
+      CONFULL => OPEN,
+      --
+      ADCLKp  => VHDCI1P(5),            -- LVDS frame clock (1X)
+      ADCLKn  => VHDCI1N(5),
+      LCLKp   => VHDCI1P(7),            -- LVDS bit clock (6X)
+      LCLKn   => VHDCI1N(7),
+      DATAp   => ads5282_0_data_p,
+      DATAn   => ads5282_0_data_n,
+      --
+      ADCLK   => ads5282_0_adclk,
+      DATA    => ads5282_0_data,
+      --
+      SCLK    => OPEN,
+      SDATA   => OPEN,
+      CSn     => OPEN
+    );
+  ads5282_0_data_p <= (VHDCI1P(0), VHDCI1P(1), VHDCI1P(2), VHDCI1P(3),
+                       VHDCI1P(6), VHDCI1P(4), VHDCI1P(8), VHDCI1P(9));
+  ads5282_0_data_n <= (VHDCI1N(0), VHDCI1N(1), VHDCI1N(2), VHDCI1N(3),
+                       VHDCI1N(6), VHDCI1N(4), VHDCI1N(8), VHDCI1N(9));
+  ads5282_0_config       <= config_reg(16*10-1 DOWNTO 16*8);
+  ads5282_0_confps       <= pulse_reg(2);
+  cs_trig0(30 DOWNTO 19) <= ads5282_0_data(0) XOR ads5282_0_data(1) XOR ads5282_0_data(2) XOR ads5282_0_data(3) XOR ads5282_0_data(4) XOR ads5282_0_data(5) XOR ads5282_0_data(6) XOR ads5282_0_data(7);
+  cs_trig0(31)           <= ads5282_0_adclk;
+  ---------------------------------------------> ADC
 
   led_obufs : FOR i IN 0 TO 7 GENERATE
     led_obuf : OBUF

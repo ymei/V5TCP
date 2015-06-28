@@ -32,7 +32,7 @@ USE UNISIM.VComponents.ALL;
 ENTITY fifo2shiftreg IS
   GENERIC (
     WIDTH   : positive := 32;           -- parallel data width
-    CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV)
+    CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
   );
   PORT (
     CLK      : IN  std_logic;           -- clock
@@ -55,7 +55,7 @@ ARCHITECTURE Behavioral OF fifo2shiftreg IS
   COMPONENT shiftreg_drive
     GENERIC (
       WIDTH   : positive := 32;           -- parallel data width
-      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV)
+      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
     );    
     PORT(
       CLK   : IN  std_logic;
