@@ -8,7 +8,7 @@
 -- Module Name:    top - Behavioral 
 -- Project Name: 
 -- Target Devices: Virtex-5 xc5vlx50t-1ff1136
--- Tool versions: ISE 14.5
+-- Tool versions: ISE 14.7
 -- Description: 
 --
 -- Dependencies: 
@@ -284,6 +284,37 @@ ARCHITECTURE Behavioral OF top IS
       CSn     : OUT std_logic
     );
   END COMPONENT;
+  COMPONENT fifo96
+    PORT (
+      RST    : IN  std_logic;
+      WR_CLK : IN  std_logic;
+      RD_CLK : IN  std_logic;
+      DIN    : IN  std_logic_vector(95 DOWNTO 0);
+      WR_EN  : IN  std_logic;
+      RD_EN  : IN  std_logic;
+      DOUT   : OUT std_logic_vector(95 DOWNTO 0);
+      FULL   : OUT std_logic;
+      EMPTY  : OUT std_logic
+    );
+  END COMPONENT;
+  COMPONENT fifo_rdwidth_reducer
+    GENERIC (
+      RDWIDTH : positive := 32;
+      RDRATIO : positive := 3
+    );
+    PORT (
+      RESET : IN  std_logic;
+      CLK   : IN  std_logic;
+      -- input data interface
+      DIN   : IN  std_logic_vector(RDWIDTH*RDRATIO-1 DOWNTO 0);
+      VALID : IN  std_logic;
+      RDREQ : OUT std_logic;
+      -- output
+      DOUT  : OUT std_logic_vector(RDWIDTH-1 DOWNTO 0);
+      EMPTY : OUT std_logic;
+      RD_EN : IN  std_logic
+    );
+  END COMPONENT;
   ---------------------------------------------> ADC
   ---------------------------------------------< Chipscope
   COMPONENT cs_icon
@@ -381,7 +412,9 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL control_mem_din                   : std_logic_vector(31 DOWNTO 0);
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
-  SIGNAL dac_cnt                           : unsigned(5 DOWNTO 0);
+  SIGNAL dac_sclk                          : std_logic;
+  SIGNAL dac_dout                          : std_logic;
+  SIGNAL dac_sync_n                        : std_logic;
   SIGNAL led_cnt                           : unsigned(25 DOWNTO 0);
   SIGNAL tm_btn                            : std_logic_vector(6 DOWNTO 0);
   SIGNAL tm_rst                            : std_logic;
@@ -390,14 +423,39 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_ex_rst_n                       : std_logic;
   ---------------------------------------------> Topmetal
   ---------------------------------------------< ADC
-  SIGNAL ads5282_0_data_p : std_logic_vector(7 DOWNTO 0);
-  SIGNAL ads5282_0_data_n : std_logic_vector(7 DOWNTO 0);
-  SIGNAL ads5282_0_adclk  : std_logic;
-  SIGNAL ads5282_0_data   : ADS5282DATA(7 DOWNTO 0);
-  SIGNAL ads5282_0_config : std_logic_vector(31 DOWNTO 0);
-  SIGNAL ads5282_0_confps : std_logic;  
+  SIGNAL ads5282_0_data_p    : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_0_data_n    : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_0_adclk     : std_logic;
+  SIGNAL ads5282_0_data      : ADS5282DATA(7 DOWNTO 0);
+  SIGNAL ads5282_0_config    : std_logic_vector(31 DOWNTO 0);
+  SIGNAL ads5282_0_confps    : std_logic;
+  SIGNAL ads5282_1_data_p    : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_1_data_n    : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_1_adclk     : std_logic;
+  SIGNAL ads5282_1_data      : ADS5282DATA(7 DOWNTO 0);
+  SIGNAL ads5282_1_config    : std_logic_vector(31 DOWNTO 0);
+  SIGNAL ads5282_1_confps    : std_logic;
+  SIGNAL ads5282_2_data_p    : std_logic_vector(3 DOWNTO 0);
+  SIGNAL ads5282_2_data_n    : std_logic_vector(3 DOWNTO 0);
+  SIGNAL ads5282_2_adclk     : std_logic;
+  SIGNAL ads5282_2_data      : ADS5282DATA(3 DOWNTO 0);
+  SIGNAL ads5282_2_config    : std_logic_vector(31 DOWNTO 0);
+  SIGNAL ads5282_2_confps    : std_logic;
+  SIGNAL adc_data_fifo_q     : std_logic_vector(31 DOWNTO 0);
+  SIGNAL adc_data_fifo_rdclk : std_logic;
+  SIGNAL adc_data_fifo_rdreq : std_logic;
+  SIGNAL adc_data_fifo_empty : std_logic;
+  SIGNAL fifo96_din          : std_logic_vector(95 DOWNTO 0);
+  SIGNAL fifo96_wrclk        : std_logic;
+  SIGNAL fifo96_wren         : std_logic;
+  SIGNAL fifo96_full         : std_logic;  
+  SIGNAL fifo96_dout         : std_logic_vector(95 DOWNTO 0);
+  SIGNAL fifo96_rden         : std_logic;
+  SIGNAL fifo96_empty        : std_logic;
+  SIGNAL fifo96_valid        : std_logic;
+  SIGNAL fifo96_trig         : std_logic;
   ---------------------------------------------> ADC
-  SIGNAL usr_data_output    : std_logic_vector (7 DOWNTO 0);
+  SIGNAL usr_data_output  : std_logic_vector (7 DOWNTO 0);
 
 BEGIN
   UART_TX_PIN <= 'Z';
@@ -578,10 +636,10 @@ BEGIN
       MEM_DIN         => OPEN,
       MEM_DOUT        => (OTHERS => '0'),
       -- Data FIFO interface, FWFT
-      DATA_FIFO_Q     => (OTHERS => '0'),
-      DATA_FIFO_EMPTY => '0',
-      DATA_FIFO_RDREQ => OPEN,
-      DATA_FIFO_RDCLK => OPEN
+      DATA_FIFO_Q     => adc_data_fifo_q,
+      DATA_FIFO_EMPTY => adc_data_fifo_empty,
+      DATA_FIFO_RDREQ => adc_data_fifo_rdreq,
+      DATA_FIFO_RDCLK => adc_data_fifo_rdclk
     );
   control_clk           <= clk_125MHz;
   cs_trig0(18 DOWNTO 3) <= pulse_reg;
@@ -589,15 +647,6 @@ BEGIN
   cs_vio_asyncin        <= config_reg(71 DOWNTO 36);
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
-  PROCESS (clk_50MHz, reset)
-  BEGIN
-    IF reset = '1' then
-      dac_cnt <= (OTHERS => '0');
-    ELSIF rising_edge(clk_50MHz) then
-      dac_cnt <= dac_cnt + 1;
-    END IF;
-  END PROCESS;
-
   dac8568_inst : fifo2shiftreg
     GENERIC MAP (
       WIDTH   => 32,                    -- parallel data width
@@ -613,11 +662,37 @@ BEGIN
       WR_PULSE => pulse_reg(1),  -- one pulse writes one word, regardless of pulse duration
       FULL     => OPEN,
       -- output
-      SCLK     => JD(1),
-      DOUT     => JD(5),
-      SYNCn    => JD(4)
+      SCLK     => dac_sclk,
+      DOUT     => dac_dout,
+      SYNCn    => dac_sync_n
     );
-
+  dac_sclk_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI1P(7),
+      OB => VHDCI1N(7),
+      I  => dac_sclk
+    );
+  dac_dout_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI1P(6),
+      OB => VHDCI1N(6),
+      I  => dac_dout
+    );
+  dac_sync_n_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI1P(8),
+      OB => VHDCI1N(8),
+      I  => dac_sync_n
+    );
   topmetal_simple_inst : topmetal_simple PORT MAP (
     RST                  => tm_rst,
     CLK                  => adc_refclk,
@@ -659,9 +734,16 @@ BEGIN
     END IF;
   END PROCESS;
   usr_data_output(3 DOWNTO 0) <= std_logic_vector(led_cnt(25 DOWNTO 22));
+  led_obufs : FOR i IN 0 TO 7 GENERATE
+    led_obuf : OBUF
+      PORT MAP (
+        I => usr_data_output(i),
+        O => LED8Bit(i)
+      );
+  END GENERATE led_obufs;
   ---------------------------------------------> Topmetal
   ---------------------------------------------< ADC
-  ads5282_interface_inst : ads5282_interface
+  ads5282_0interface_inst : ads5282_interface
     GENERIC MAP (
       ADC_NCH => 8
     )
@@ -673,37 +755,146 @@ BEGIN
       CONFPS  => ads5282_0_confps,
       CONFULL => OPEN,
       --
-      ADCLKp  => VHDCI1P(5),            -- LVDS frame clock (1X)
-      ADCLKn  => VHDCI1N(5),
-      LCLKp   => VHDCI1P(7),            -- LVDS bit clock (6X)
-      LCLKn   => VHDCI1N(7),
+      ADCLKp  => VHDCI1P(9),            -- LVDS frame clock (1X)
+      ADCLKn  => VHDCI1N(9),
+      LCLKp   => VHDCI1P(10),           -- LVDS bit clock (6X)
+      LCLKn   => VHDCI1N(10),
       DATAp   => ads5282_0_data_p,
       DATAn   => ads5282_0_data_n,
       --
       ADCLK   => ads5282_0_adclk,
       DATA    => ads5282_0_data,
       --
-      SCLK    => OPEN,
-      SDATA   => OPEN,
-      CSn     => OPEN
+      SCLK    => VHDCI1N(0),
+      SDATA   => VHDCI1P(0),
+      CSn     => VHDCI1P(1)
     );
-  ads5282_0_data_p <= (VHDCI1P(0), VHDCI1P(1), VHDCI1P(2), VHDCI1P(3),
-                       VHDCI1P(6), VHDCI1P(4), VHDCI1P(8), VHDCI1P(9));
-  ads5282_0_data_n <= (VHDCI1N(0), VHDCI1N(1), VHDCI1N(2), VHDCI1N(3),
-                       VHDCI1N(6), VHDCI1N(4), VHDCI1N(8), VHDCI1N(9));
-  ads5282_0_config       <= config_reg(16*10-1 DOWNTO 16*8);
-  ads5282_0_confps       <= pulse_reg(2);
-  cs_trig0(30 DOWNTO 19) <= ads5282_0_data(0) XOR ads5282_0_data(1) XOR ads5282_0_data(2) XOR ads5282_0_data(3) XOR ads5282_0_data(4) XOR ads5282_0_data(5) XOR ads5282_0_data(6) XOR ads5282_0_data(7);
+  ads5282_0_data_p <= (VHDCI1P(19), VHDCI1P(18), VHDCI1P(17), VHDCI1P(16),
+                       VHDCI1P(15), VHDCI1P(14), VHDCI1P(13), VHDCI1P(12));
+  ads5282_0_data_n <= (VHDCI1N(19), VHDCI1N(18), VHDCI1N(17), VHDCI1N(16),
+                       VHDCI1N(15), VHDCI1N(14), VHDCI1N(13), VHDCI1N(12));
+  ads5282_0_config <= config_reg(16*10-1 DOWNTO 16*8);
+  ads5282_0_confps <= pulse_reg(2);
+  ads5282_1interface_inst : ads5282_interface
+    GENERIC MAP (
+      ADC_NCH => 8
+    )
+    PORT MAP (
+      RESET   => reset,
+      CLK     => control_clk,
+      --
+      CONFIG  => ads5282_1_config,
+      CONFPS  => ads5282_1_confps,
+      CONFULL => OPEN,
+      --
+      ADCLKp  => VHDCI2P(12),           -- LVDS frame clock (1X)
+      ADCLKn  => VHDCI2N(12),
+      LCLKp   => VHDCI2P(11),           -- LVDS bit clock (6X)
+      LCLKn   => VHDCI2N(11),
+      DATAp   => ads5282_1_data_p,
+      DATAn   => ads5282_1_data_n,
+      --
+      ADCLK   => ads5282_1_adclk,
+      DATA    => ads5282_1_data,
+      --
+      SCLK    => VHDCI2N(0),
+      SDATA   => VHDCI2N(1),
+      CSn     => VHDCI2N(2)
+    );
+  ads5282_1_data_p <= (VHDCI2P(19), VHDCI2P(18), VHDCI2P(17), VHDCI2P(16),
+                       VHDCI2P(15), VHDCI2P(14), VHDCI2P(13), VHDCI2P(10));
+  ads5282_1_data_n <= (VHDCI2N(19), VHDCI2N(18), VHDCI2N(17), VHDCI2N(16),
+                       VHDCI2N(15), VHDCI2N(14), VHDCI2N(13), VHDCI2N(10));
+  ads5282_1_config <= config_reg(16*10-1 DOWNTO 16*8);
+  ads5282_1_confps <= pulse_reg(3);
+  ads5282_2interface_inst : ads5282_interface
+    GENERIC MAP (
+      ADC_NCH => 4
+    )
+    PORT MAP (
+      RESET   => reset,
+      CLK     => control_clk,
+      --
+      CONFIG  => ads5282_2_config,
+      CONFPS  => ads5282_2_confps,
+      CONFULL => OPEN,
+      --
+      ADCLKp  => VHDCI2P(8),            -- LVDS frame clock (1X)
+      ADCLKn  => VHDCI2N(8),
+      LCLKp   => VHDCI2P(9),            -- LVDS bit clock (6X)
+      LCLKn   => VHDCI2N(9),
+      DATAp   => ads5282_2_data_p,
+      DATAn   => ads5282_2_data_n,
+      --
+      ADCLK   => ads5282_2_adclk,
+      DATA    => ads5282_2_data,
+      --
+      SCLK    => VHDCI2P(0),
+      SDATA   => VHDCI2P(1),
+      CSn     => VHDCI2P(2)
+    );
+  ads5282_2_data_p <= (VHDCI2P(6), VHDCI2P(5), VHDCI2P(4), VHDCI2P(3));
+  ads5282_2_data_n <= (VHDCI2N(6), VHDCI2N(5), VHDCI2N(4), VHDCI2N(3));
+  ads5282_2_config <= config_reg(16*10-1 DOWNTO 16*8);
+  ads5282_2_confps <= pulse_reg(4);
+
+  fifo96_inst : fifo96
+    PORT MAP (
+      RST    => fifo96_trig,
+      WR_CLK => fifo96_wrclk,
+      RD_CLK => adc_data_fifo_rdclk,
+      DIN    => fifo96_din,
+      WR_EN  => fifo96_wren,
+      RD_EN  => fifo96_rden,
+      DOUT   => fifo96_dout,
+      FULL   => OPEN,
+      EMPTY  => fifo96_empty
+    );
+  fifo96_wren  <= '1';
+  fifo96_trig  <= pulse_reg(5);
+  fifo96_valid <= NOT fifo96_empty;
+  fifo_rdwidth_reducer_inst : fifo_rdwidth_reducer
+    GENERIC MAP (
+      RDWIDTH => 32,
+      RDRATIO => 3
+    )
+    PORT MAP (
+      RESET => fifo96_trig,
+      CLK   => adc_data_fifo_rdclk,
+      -- input data interface
+      DIN   => fifo96_dout,
+      VALID => fifo96_valid,
+      RDREQ => fifo96_rden,
+      -- output
+      DOUT  => adc_data_fifo_q,
+      EMPTY => adc_data_fifo_empty,
+      RD_EN => adc_data_fifo_rdreq
+    );
+  WITH config_reg(16*10+1 DOWNTO 16*10) SELECT
+    fifo96_wrclk <= ads5282_0_adclk WHEN "00",
+    ads5282_1_adclk                 WHEN "01",
+    ads5282_2_adclk                 WHEN "10",
+    control_clk                     WHEN OTHERS;
+  
+  WITH config_reg(16*10+1 DOWNTO 16*10) SELECT
+    fifo96_din <= ads5282_0_data(7) & ads5282_0_data(6) & ads5282_0_data(5) & ads5282_0_data(4) &
+                  ads5282_0_data(3) & ads5282_0_data(2) & ads5282_0_data(1) & ads5282_0_data(0)
+    WHEN "00",
+    ads5282_1_data(7) & ads5282_1_data(6) & ads5282_1_data(5) & ads5282_1_data(4) &
+    ads5282_1_data(3) & ads5282_1_data(2) & ads5282_1_data(1) & ads5282_1_data(0)
+    WHEN "01",
+    ads5282_2_data(3) & ads5282_2_data(2) & ads5282_2_data(1) & ads5282_2_data(0) &
+    ads5282_2_data(3) & ads5282_2_data(2) & ads5282_2_data(1) & ads5282_2_data(0)
+    WHEN "10",
+    x"000000000000000000000000" WHEN OTHERS;
+
+cs_trig0(30 DOWNTO 19) <= ads5282_0_data(0) XOR ads5282_0_data(1) XOR ads5282_0_data(2) XOR ads5282_0_data(3) XOR ads5282_0_data(4) XOR ads5282_0_data(5) XOR ads5282_0_data(6) XOR ads5282_0_data(7)
+                            XOR
+ads5282_1_data(0) XOR ads5282_1_data(1) XOR ads5282_1_data(2) XOR ads5282_1_data(3) XOR ads5282_1_data(4) XOR ads5282_1_data(5) XOR ads5282_1_data(6) XOR ads5282_1_data(7)
+                            XOR
+ads5282_2_data(0) XOR ads5282_2_data(1) XOR ads5282_2_data(2) XOR ads5282_2_data(3);
   cs_trig0(31)           <= ads5282_0_adclk;
   ---------------------------------------------> ADC
-
-  led_obufs : FOR i IN 0 TO 7 GENERATE
-    led_obuf : OBUF
-      PORT MAP (
-        I => usr_data_output(i),
-        O => LED8Bit(i)
-      );
-  END GENERATE led_obufs;
 
   pulsegen_inst : pulsegen
     GENERIC MAP (
