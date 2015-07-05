@@ -69,6 +69,21 @@ ENTITY top IS
     GMII_COL_0    : IN    std_logic;
     GMII_CRS_0    : IN    std_logic;
     PHY_RST_n     : OUT   std_logic;
+    -- SDRAM
+    DDR2_DQ       : INOUT std_logic_vector(63 DOWNTO 0);
+    DDR2_DQS      : INOUT std_logic_vector(7 DOWNTO 0);
+    DDR2_DQS_N    : INOUT std_logic_vector(7 DOWNTO 0);
+    DDR2_A        : OUT   std_logic_vector(12 DOWNTO 0);
+    DDR2_BA       : OUT   std_logic_vector(1 DOWNTO 0);
+    DDR2_RAS_N    : OUT   std_logic;
+    DDR2_CAS_N    : OUT   std_logic;
+    DDR2_WE_N     : OUT   std_logic;
+    DDR2_CS_N     : OUT   std_logic_vector(0 DOWNTO 0);
+    DDR2_ODT      : OUT   std_logic_vector(0 DOWNTO 0);
+    DDR2_CKE      : OUT   std_logic_vector(0 DOWNTO 0);
+    DDR2_DM       : OUT   std_logic_vector(7 DOWNTO 0);
+    DDR2_CK       : OUT   std_logic_vector(1 DOWNTO 0);
+    DDR2_CK_N     : OUT   std_logic_vector(1 DOWNTO 0);
     -- VHDCI
     VHDCI1P       : INOUT std_logic_vector(19 DOWNTO 0);
     VHDCI1N       : INOUT std_logic_vector(19 DOWNTO 0);
@@ -209,6 +224,40 @@ ARCHITECTURE Behavioral OF top IS
     );
   END COMPONENT;
   ---------------------------------------------> UART/RS232
+  ---------------------------------------------< SDRAM
+  COMPONENT sdram_ddr2
+    GENERIC (
+      INDATA_WIDTH   : positive := 256;
+      OUTDATA_WIDTH  : positive := 32;
+      APP_ADDR_WIDTH : positive := 31;
+      APP_DATA_WIDTH : positive := 128;
+      APP_MASK_WIDTH : positive := 16;
+      APP_ADDR_BURST : positive := 8
+    );
+    PORT (
+      CLK           : IN    std_logic;  -- system clock, directly out of ibufg
+      CLK200        : IN    std_logic;  -- 200MHz reference clock for iodelay
+      RESET         : IN    std_logic;
+      --
+      DDR2_DQ       : INOUT std_logic_vector(63 DOWNTO 0);
+      DDR2_DQS      : INOUT std_logic_vector(7 DOWNTO 0);
+      DDR2_DQS_N    : INOUT std_logic_vector(7 DOWNTO 0);
+      DDR2_A        : OUT   std_logic_vector(12 DOWNTO 0);
+      DDR2_BA       : OUT   std_logic_vector(1 DOWNTO 0);
+      DDR2_RAS_N    : OUT   std_logic;
+      DDR2_CAS_N    : OUT   std_logic;
+      DDR2_WE_N     : OUT   std_logic;
+      DDR2_CS_N     : OUT   std_logic_vector(0 DOWNTO 0);
+      DDR2_ODT      : OUT   std_logic_vector(0 DOWNTO 0);
+      DDR2_CKE      : OUT   std_logic_vector(0 DOWNTO 0);
+      DDR2_DM       : OUT   std_logic_vector(7 DOWNTO 0);
+      DDR2_CK       : OUT   std_logic_vector(1 DOWNTO 0);
+      DDR2_CK_N     : OUT   std_logic_vector(1 DOWNTO 0);
+      -- Status Outputs
+      PHY_INIT_DONE : OUT   std_logic
+    );
+  END COMPONENT;
+  ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
   COMPONENT topmetal_simple
     GENERIC (
@@ -411,6 +460,9 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL control_mem_addr                  : std_logic_vector(31 DOWNTO 0);
   SIGNAL control_mem_din                   : std_logic_vector(31 DOWNTO 0);
   ---------------------------------------------> UART/RS232
+  ---------------------------------------------< SDRAM
+  SIGNAL sdram_phy_init_done               : std_logic;
+  ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
   SIGNAL dac_sclk                          : std_logic;
   SIGNAL dac_dout                          : std_logic;
@@ -646,6 +698,31 @@ BEGIN
   cs_vio_syncin         <= config_reg(35 DOWNTO 0);
   cs_vio_asyncin        <= config_reg(71 DOWNTO 36);
   ---------------------------------------------> UART/RS232
+  ---------------------------------------------< SDRAM
+  sdram_ddr2_inst : sdram_ddr2
+    PORT MAP (
+      CLK           => control_clk,
+      CLK200        => clk_200MHz,
+      RESET         => reset,
+      --
+      DDR2_DQ       => DDR2_DQ,
+      DDR2_DQS      => DDR2_DQS,
+      DDR2_DQS_N    => DDR2_DQS_N,
+      DDR2_A        => DDR2_A,
+      DDR2_BA       => DDR2_BA,
+      DDR2_RAS_N    => DDR2_RAS_N,
+      DDR2_CAS_N    => DDR2_CAS_N,
+      DDR2_WE_N     => DDR2_WE_N,
+      DDR2_CS_N     => DDR2_CS_N,
+      DDR2_ODT      => DDR2_ODT,
+      DDR2_CKE      => DDR2_CKE,
+      DDR2_DM       => DDR2_DM,
+      DDR2_CK       => DDR2_CK,
+      DDR2_CK_N     => DDR2_CK_N,
+      -- Status Outputs
+      PHY_INIT_DONE => sdram_phy_init_done
+    );
+  ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
   dac8568_inst : fifo2shiftreg
     GENERIC MAP (
@@ -734,6 +811,7 @@ BEGIN
     END IF;
   END PROCESS;
   usr_data_output(3 DOWNTO 0) <= std_logic_vector(led_cnt(25 DOWNTO 22));
+  usr_data_output(7)          <= sdram_phy_init_done;
   led_obufs : FOR i IN 0 TO 7 GENERATE
     led_obuf : OBUF
       PORT MAP (
@@ -743,6 +821,18 @@ BEGIN
   END GENERATE led_obufs;
   ---------------------------------------------> Topmetal
   ---------------------------------------------< ADC
+  ads5282_idelayctrl0_inst : IDELAYCTRL
+    PORT MAP (
+      RDY    => OPEN,        -- 1-bit output indicates validity of the REFCLK
+      REFCLK => clk_200MHz,             -- 1-bit reference clock input
+      RST    => reset                   -- 1-bit reset input
+    );
+  ads5282_idelayctrl1_inst : IDELAYCTRL
+    PORT MAP (
+      RDY    => OPEN,        -- 1-bit output indicates validity of the REFCLK
+      REFCLK => clk_200MHz,             -- 1-bit reference clock input
+      RST    => reset                   -- 1-bit reset input
+    );
   ads5282_0interface_inst : ads5282_interface
     GENERIC MAP (
       ADC_NCH => 8
