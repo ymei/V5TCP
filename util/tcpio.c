@@ -120,6 +120,7 @@ static int get_socket(char *host, char *port)
             warn("setsockopt TCP_NODELAY");
             continue;
         }
+        sockopt = 1;
         if(setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (char*)&sockopt, sizeof(sockopt)) == -1) {
             close(sockfd);
             warn("setsockopt SO_KEEPALIVE");
@@ -155,7 +156,7 @@ static int query_response_with_timeout(int sockfd, char *queryStr, size_t nbytes
         warn("send");
         return (int)nw;
     }
-    if(nbytes_ret_exp == 0) return 0;
+    if(nbytes_ret_exp == 0) return nw;
 
     ret = 0;
     for(;;) {
@@ -167,6 +168,7 @@ static int query_response_with_timeout(int sockfd, char *queryStr, size_t nbytes
             return nsel;
         }
         if(nsel == 0) { /* timed out */
+            warn("select");
             break;
         }
         if(nsel>0 && FD_ISSET(sockfd, &rfd)) {

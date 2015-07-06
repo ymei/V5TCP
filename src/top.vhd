@@ -225,36 +225,63 @@ ARCHITECTURE Behavioral OF top IS
   END COMPONENT;
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< SDRAM
+  CONSTANT SRAM_ADDR_WIDTH : positive := 26;
   COMPONENT sdram_ddr2
     GENERIC (
       INDATA_WIDTH   : positive := 256;
       OUTDATA_WIDTH  : positive := 32;
-      APP_ADDR_WIDTH : positive := 31;
+      APP_ADDR_WIDTH : positive := SRAM_ADDR_WIDTH+1;
       APP_DATA_WIDTH : positive := 128;
       APP_MASK_WIDTH : positive := 16;
       APP_ADDR_BURST : positive := 8
     );
     PORT (
-      CLK           : IN    std_logic;  -- system clock, directly out of ibufg
-      CLK200        : IN    std_logic;  -- 200MHz reference clock for iodelay
-      RESET         : IN    std_logic;
-      --
-      DDR2_DQ       : INOUT std_logic_vector(63 DOWNTO 0);
-      DDR2_DQS      : INOUT std_logic_vector(7 DOWNTO 0);
-      DDR2_DQS_N    : INOUT std_logic_vector(7 DOWNTO 0);
-      DDR2_A        : OUT   std_logic_vector(12 DOWNTO 0);
-      DDR2_BA       : OUT   std_logic_vector(1 DOWNTO 0);
-      DDR2_RAS_N    : OUT   std_logic;
-      DDR2_CAS_N    : OUT   std_logic;
-      DDR2_WE_N     : OUT   std_logic;
-      DDR2_CS_N     : OUT   std_logic_vector(0 DOWNTO 0);
-      DDR2_ODT      : OUT   std_logic_vector(0 DOWNTO 0);
-      DDR2_CKE      : OUT   std_logic_vector(0 DOWNTO 0);
-      DDR2_DM       : OUT   std_logic_vector(7 DOWNTO 0);
-      DDR2_CK       : OUT   std_logic_vector(1 DOWNTO 0);
-      DDR2_CK_N     : OUT   std_logic_vector(1 DOWNTO 0);
+      CLK                : IN    std_logic;
+      CLK200             : IN    std_logic;  -- 200MHz clock this module is working with
+      RESET              : IN    std_logic;
+      -- SDRAM DDR2
+      DDR2_DQ            : INOUT std_logic_vector(63 DOWNTO 0);
+      DDR2_DQS           : INOUT std_logic_vector(7 DOWNTO 0);
+      DDR2_DQS_N         : INOUT std_logic_vector(7 DOWNTO 0);
+      DDR2_A             : OUT   std_logic_vector(12 DOWNTO 0);
+      DDR2_BA            : OUT   std_logic_vector(1 DOWNTO 0);
+      DDR2_RAS_N         : OUT   std_logic;
+      DDR2_CAS_N         : OUT   std_logic;
+      DDR2_WE_N          : OUT   std_logic;
+      DDR2_CS_N          : OUT   std_logic_vector(0 DOWNTO 0);
+      DDR2_ODT           : OUT   std_logic_vector(0 DOWNTO 0);
+      DDR2_CKE           : OUT   std_logic_vector(0 DOWNTO 0);
+      DDR2_DM            : OUT   std_logic_vector(7 DOWNTO 0);
+      DDR2_CK            : OUT   std_logic_vector(1 DOWNTO 0);
+      DDR2_CK_N          : OUT   std_logic_vector(1 DOWNTO 0);
       -- Status Outputs
-      PHY_INIT_DONE : OUT   std_logic
+      PHY_INIT_DONE      : OUT   std_logic;
+      -- Control
+      CTRL_RESET         : IN    std_logic;
+      WR_START           : IN    std_logic;
+      WR_ADDR_BEGIN      : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      WR_STOP            : IN    std_logic;
+      WR_WRAP_AROUND     : IN    std_logic;
+      POST_TRIGGER       : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      WR_BUSY            : OUT   std_logic;
+      WR_POINTER         : OUT   std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      TRIGGER_POINTER    : OUT   std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      WR_WRAPPED         : OUT   std_logic;
+      RD_START           : IN    std_logic;
+      RD_ADDR_BEGIN      : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      RD_ADDR_END        : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      RD_BUSY            : OUT   std_logic;
+      -- I/O data fifo
+      DATA_FIFO_RESET    : IN    std_logic;
+      INDATA_FIFO_WRCLK  : IN    std_logic;
+      INDATA_FIFO_Q      : IN    std_logic_vector(INDATA_WIDTH-1 DOWNTO 0);
+      INDATA_FIFO_FULL   : OUT   std_logic;
+      INDATA_FIFO_WREN   : IN    std_logic;
+      --
+      OUTDATA_FIFO_RDCLK : IN    std_logic;
+      OUTDATA_FIFO_Q     : OUT   std_logic_vector(OUTDATA_WIDTH-1 DOWNTO 0);
+      OUTDATA_FIFO_EMPTY : OUT   std_logic;
+      OUTDATA_FIFO_RDEN  : IN    std_logic
     );
   END COMPONENT;
   ---------------------------------------------> SDRAM
@@ -459,9 +486,31 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL control_mem_we                    : std_logic;
   SIGNAL control_mem_addr                  : std_logic_vector(31 DOWNTO 0);
   SIGNAL control_mem_din                   : std_logic_vector(31 DOWNTO 0);
+  --
+  SIGNAL control_data_fifo_q               : std_logic_vector(31 DOWNTO 0);
+  SIGNAL control_data_fifo_rdclk           : std_logic;
+  SIGNAL control_data_fifo_rdreq           : std_logic;
+  SIGNAL control_data_fifo_empty           : std_logic;
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< SDRAM
   SIGNAL sdram_phy_init_done               : std_logic;
+  SIGNAL sdram_reset                       : std_logic;
+  SIGNAL sdram_clk200                      : std_logic;
+  SIGNAL sdram_rd_addr_begin               : std_logic_vector(SRAM_ADDR_WIDTH DOWNTO 0);
+  SIGNAL sdram_wr_start                    : std_logic;
+  SIGNAL sdram_wr_busy                     : std_logic;
+  SIGNAL sdram_wr_wrapped                  : std_logic;
+  SIGNAL sdram_rd_start                    : std_logic;
+  SIGNAL sdram_rd_busy                     : std_logic;
+  SIGNAL sdram_data_fifo_reset             : std_logic;
+  SIGNAL sdram_idata_fifo_wrclk            : std_logic;
+  SIGNAL sdram_idata_fifo_q                : std_logic_vector(255 DOWNTO 0);
+  SIGNAL sdram_idata_fifo_full             : std_logic;
+  SIGNAL sdram_idata_fifo_wren             : std_logic;
+  SIGNAL sdram_data_fifo_rdclk             : std_logic;
+  SIGNAL sdram_data_fifo_dout              : std_logic_vector(31 DOWNTO 0);
+  SIGNAL sdram_data_fifo_empty             : std_logic;
+  SIGNAL sdram_data_fifo_rden              : std_logic;
   ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
   SIGNAL dac_sclk                          : std_logic;
@@ -475,39 +524,38 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_ex_rst_n                       : std_logic;
   ---------------------------------------------> Topmetal
   ---------------------------------------------< ADC
-  SIGNAL ads5282_0_data_p    : std_logic_vector(7 DOWNTO 0);
-  SIGNAL ads5282_0_data_n    : std_logic_vector(7 DOWNTO 0);
-  SIGNAL ads5282_0_adclk     : std_logic;
-  SIGNAL ads5282_0_data      : ADS5282DATA(7 DOWNTO 0);
-  SIGNAL ads5282_0_config    : std_logic_vector(31 DOWNTO 0);
-  SIGNAL ads5282_0_confps    : std_logic;
-  SIGNAL ads5282_1_data_p    : std_logic_vector(7 DOWNTO 0);
-  SIGNAL ads5282_1_data_n    : std_logic_vector(7 DOWNTO 0);
-  SIGNAL ads5282_1_adclk     : std_logic;
-  SIGNAL ads5282_1_data      : ADS5282DATA(7 DOWNTO 0);
-  SIGNAL ads5282_1_config    : std_logic_vector(31 DOWNTO 0);
-  SIGNAL ads5282_1_confps    : std_logic;
-  SIGNAL ads5282_2_data_p    : std_logic_vector(3 DOWNTO 0);
-  SIGNAL ads5282_2_data_n    : std_logic_vector(3 DOWNTO 0);
-  SIGNAL ads5282_2_adclk     : std_logic;
-  SIGNAL ads5282_2_data      : ADS5282DATA(3 DOWNTO 0);
-  SIGNAL ads5282_2_config    : std_logic_vector(31 DOWNTO 0);
-  SIGNAL ads5282_2_confps    : std_logic;
-  SIGNAL adc_data_fifo_q     : std_logic_vector(31 DOWNTO 0);
-  SIGNAL adc_data_fifo_rdclk : std_logic;
-  SIGNAL adc_data_fifo_rdreq : std_logic;
-  SIGNAL adc_data_fifo_empty : std_logic;
-  SIGNAL fifo96_din          : std_logic_vector(95 DOWNTO 0);
-  SIGNAL fifo96_wrclk        : std_logic;
-  SIGNAL fifo96_wren         : std_logic;
-  SIGNAL fifo96_full         : std_logic;  
-  SIGNAL fifo96_dout         : std_logic_vector(95 DOWNTO 0);
-  SIGNAL fifo96_rden         : std_logic;
-  SIGNAL fifo96_empty        : std_logic;
-  SIGNAL fifo96_valid        : std_logic;
-  SIGNAL fifo96_trig         : std_logic;
+  SIGNAL ads5282_0_data_p                  : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_0_data_n                  : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_0_adclk                   : std_logic;
+  SIGNAL ads5282_0_data                    : ADS5282DATA(7 DOWNTO 0);
+  SIGNAL ads5282_0_config                  : std_logic_vector(31 DOWNTO 0);
+  SIGNAL ads5282_0_confps                  : std_logic;
+  SIGNAL ads5282_1_data_p                  : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_1_data_n                  : std_logic_vector(7 DOWNTO 0);
+  SIGNAL ads5282_1_adclk                   : std_logic;
+  SIGNAL ads5282_1_data                    : ADS5282DATA(7 DOWNTO 0);
+  SIGNAL ads5282_1_config                  : std_logic_vector(31 DOWNTO 0);
+  SIGNAL ads5282_1_confps                  : std_logic;
+  SIGNAL ads5282_2_data_p                  : std_logic_vector(3 DOWNTO 0);
+  SIGNAL ads5282_2_data_n                  : std_logic_vector(3 DOWNTO 0);
+  SIGNAL ads5282_2_adclk                   : std_logic;
+  SIGNAL ads5282_2_data                    : ADS5282DATA(3 DOWNTO 0);
+  SIGNAL ads5282_2_config                  : std_logic_vector(31 DOWNTO 0);
+  SIGNAL ads5282_2_confps                  : std_logic;
+  SIGNAL fifo96_din                        : std_logic_vector(95 DOWNTO 0);
+  SIGNAL fifo96_wrclk                      : std_logic;
+  SIGNAL fifo96_wren                       : std_logic;
+  SIGNAL fifo96_full                       : std_logic;
+  SIGNAL fifo96_dout                       : std_logic_vector(95 DOWNTO 0);
+  SIGNAL fifo96_rden                       : std_logic;
+  SIGNAL fifo96_empty                      : std_logic;
+  SIGNAL fifo96_valid                      : std_logic;
+  SIGNAL fifo96_trig                       : std_logic;
+  SIGNAL fifo96_reduced_rdreq              : std_logic;
+  SIGNAL fifo96_reduced_q                  : std_logic_vector(31 DOWNTO 0);
+  SIGNAL fifo96_reduced_empty              : std_logic;
   ---------------------------------------------> ADC
-  SIGNAL usr_data_output  : std_logic_vector (7 DOWNTO 0);
+  SIGNAL usr_data_output                   : std_logic_vector (7 DOWNTO 0);
 
 BEGIN
   UART_TX_PIN <= 'Z';
@@ -688,10 +736,10 @@ BEGIN
       MEM_DIN         => OPEN,
       MEM_DOUT        => (OTHERS => '0'),
       -- Data FIFO interface, FWFT
-      DATA_FIFO_Q     => adc_data_fifo_q,
-      DATA_FIFO_EMPTY => adc_data_fifo_empty,
-      DATA_FIFO_RDREQ => adc_data_fifo_rdreq,
-      DATA_FIFO_RDCLK => adc_data_fifo_rdclk
+      DATA_FIFO_Q     => control_data_fifo_q,
+      DATA_FIFO_EMPTY => control_data_fifo_empty,
+      DATA_FIFO_RDREQ => control_data_fifo_rdreq,
+      DATA_FIFO_RDCLK => control_data_fifo_rdclk
     );
   control_clk           <= clk_125MHz;
   cs_trig0(18 DOWNTO 3) <= pulse_reg;
@@ -699,29 +747,102 @@ BEGIN
   cs_vio_asyncin        <= config_reg(71 DOWNTO 36);
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< SDRAM
+  sdram_clk200_bufgce_inst : BUFGCE
+    PORT MAP (
+      O  => sdram_clk200,               -- Clock buffer ouptput
+      CE => DIPSw8Bit(7),               -- Clock enable input
+      I  => clk_200MHz                  -- Clock buffer input
+    );
+  sdram_reset <= (NOT DIPSw8Bit(7)) OR reset;
   sdram_ddr2_inst : sdram_ddr2
     PORT MAP (
-      CLK           => control_clk,
-      CLK200        => clk_200MHz,
-      RESET         => reset,
-      --
-      DDR2_DQ       => DDR2_DQ,
-      DDR2_DQS      => DDR2_DQS,
-      DDR2_DQS_N    => DDR2_DQS_N,
-      DDR2_A        => DDR2_A,
-      DDR2_BA       => DDR2_BA,
-      DDR2_RAS_N    => DDR2_RAS_N,
-      DDR2_CAS_N    => DDR2_CAS_N,
-      DDR2_WE_N     => DDR2_WE_N,
-      DDR2_CS_N     => DDR2_CS_N,
-      DDR2_ODT      => DDR2_ODT,
-      DDR2_CKE      => DDR2_CKE,
-      DDR2_DM       => DDR2_DM,
-      DDR2_CK       => DDR2_CK,
-      DDR2_CK_N     => DDR2_CK_N,
+      CLK                => control_clk,
+      CLK200             => sdram_clk200,  -- 200MHz clock this module is working with
+      RESET              => sdram_reset,
+      -- SDRAM DDR2
+      DDR2_DQ            => DDR2_DQ,
+      DDR2_DQS           => DDR2_DQS,
+      DDR2_DQS_N         => DDR2_DQS_N,
+      DDR2_A             => DDR2_A,
+      DDR2_BA            => DDR2_BA,
+      DDR2_RAS_N         => DDR2_RAS_N,
+      DDR2_CAS_N         => DDR2_CAS_N,
+      DDR2_WE_N          => DDR2_WE_N,
+      DDR2_CS_N          => DDR2_CS_N,
+      DDR2_ODT           => DDR2_ODT,
+      DDR2_CKE           => DDR2_CKE,
+      DDR2_DM            => DDR2_DM,
+      DDR2_CK            => DDR2_CK,
+      DDR2_CK_N          => DDR2_CK_N,
       -- Status Outputs
-      PHY_INIT_DONE => sdram_phy_init_done
+      PHY_INIT_DONE      => sdram_phy_init_done,
+      -- Control
+      CTRL_RESET         => pulse_reg(6),
+      WR_START           => sdram_wr_start,
+      WR_ADDR_BEGIN      => config_reg(16*12+SRAM_ADDR_WIDTH DOWNTO 16*12),
+      WR_STOP            => pulse_reg(7),
+      WR_WRAP_AROUND     => config_reg(16*8+31),
+      POST_TRIGGER       => config_reg(16*14+SRAM_ADDR_WIDTH DOWNTO 16*14),
+      WR_BUSY            => sdram_wr_busy,
+      WR_POINTER         => OPEN,
+      TRIGGER_POINTER    => status_reg(SRAM_ADDR_WIDTH DOWNTO 0),
+      WR_WRAPPED         => sdram_wr_wrapped,
+      RD_START           => sdram_rd_start,
+      RD_ADDR_BEGIN      => sdram_rd_addr_begin,
+      RD_ADDR_END        => config_reg(16*16+SRAM_ADDR_WIDTH DOWNTO 16*16),
+      RD_BUSY            => sdram_rd_busy,
+      --
+      DATA_FIFO_RESET    => sdram_data_fifo_reset,
+      INDATA_FIFO_WRCLK  => sdram_idata_fifo_wrclk,
+      INDATA_FIFO_Q      => sdram_idata_fifo_q,
+      INDATA_FIFO_FULL   => sdram_idata_fifo_full,
+      INDATA_FIFO_WREN   => sdram_idata_fifo_wren,
+      --
+      OUTDATA_FIFO_RDCLK => sdram_data_fifo_rdclk,
+      OUTDATA_FIFO_Q     => sdram_data_fifo_dout,
+      OUTDATA_FIFO_EMPTY => sdram_data_fifo_empty,
+      OUTDATA_FIFO_RDEN  => sdram_data_fifo_rden
     );
+  sdram_rd_start        <= pulse_reg(8) OR BTN(1);
+  sdram_data_fifo_reset <= pulse_reg(9);
+  status_reg(16*2)      <= sdram_wr_busy;
+  usr_data_output(6)    <= sdram_wr_busy;  
+  status_reg(16*2+1)    <= sdram_wr_wrapped;
+  usr_data_output(5)    <= sdram_wr_wrapped;
+  status_reg(16*2+2)    <= sdram_rd_busy;
+  usr_data_output(4)    <= sdram_rd_busy;
+  sdram_rd_addr_begin   <= (OTHERS => '0');
+
+  -- select source to read from into the control interface data fifo
+  --sdram_data_fifo_rdclk   <= control_data_fifo_rdclk;
+  --control_data_fifo_q     <= sdram_data_fifo_dout;
+  --control_data_fifo_empty <= sdram_data_fifo_empty;
+  --sdram_data_fifo_rden    <= control_data_fifo_rdreq;
+  control_data_fifo_q   <= sdram_data_fifo_dout WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                         ELSE fifo96_reduced_q;
+  control_data_fifo_empty <= '0';
+  --control_data_fifo_empty <= sdram_data_fifo_empty WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+  --                           ELSE fifo96_reduced_empty;
+  sdram_data_fifo_rden <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                          ELSE '0';
+  fifo96_reduced_rdreq <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                          ELSE '0';
+
+  -- for memory write continuity test
+  sdram_wr_start         <= pulse_reg(10) OR BTN(0);
+  sdram_idata_fifo_wrclk <= clk_50MHz;
+  sdram_idata_fifo_wren  <= '1';
+  -- cs_trig0(32)        <= sdram_idata_fifo_full;
+  PROCESS (sdram_idata_fifo_wrclk) IS
+    VARIABLE counter : unsigned(sdram_idata_fifo_q'length-1 DOWNTO 0) := (OTHERS => '0');
+  BEGIN
+    IF rising_edge(sdram_idata_fifo_wrclk) THEN
+      sdram_idata_fifo_q <= std_logic_vector(counter);
+      IF sdram_idata_fifo_full = '0' THEN
+        counter := counter + 1;
+      END IF;
+    END IF;
+  END PROCESS;
   ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
   dac8568_inst : fifo2shiftreg
@@ -932,7 +1053,7 @@ BEGIN
     PORT MAP (
       RST    => fifo96_trig,
       WR_CLK => fifo96_wrclk,
-      RD_CLK => adc_data_fifo_rdclk,
+      RD_CLK => control_data_fifo_rdclk,
       DIN    => fifo96_din,
       WR_EN  => fifo96_wren,
       RD_EN  => fifo96_rden,
@@ -950,22 +1071,23 @@ BEGIN
     )
     PORT MAP (
       RESET => fifo96_trig,
-      CLK   => adc_data_fifo_rdclk,
+      CLK   => control_data_fifo_rdclk,
       -- input data interface
       DIN   => fifo96_dout,
       VALID => fifo96_valid,
       RDREQ => fifo96_rden,
       -- output
-      DOUT  => adc_data_fifo_q,
-      EMPTY => adc_data_fifo_empty,
-      RD_EN => adc_data_fifo_rdreq
+      DOUT  => fifo96_reduced_q,
+      EMPTY => fifo96_reduced_empty,
+      RD_EN => fifo96_reduced_rdreq
     );
+  -- select source to write to fifo96
   WITH config_reg(16*10+1 DOWNTO 16*10) SELECT
     fifo96_wrclk <= ads5282_0_adclk WHEN "00",
     ads5282_1_adclk                 WHEN "01",
     ads5282_2_adclk                 WHEN "10",
     control_clk                     WHEN OTHERS;
-  
+
   WITH config_reg(16*10+1 DOWNTO 16*10) SELECT
     fifo96_din <= ads5282_0_data(7) & ads5282_0_data(6) & ads5282_0_data(5) & ads5282_0_data(4) &
                   ads5282_0_data(3) & ads5282_0_data(2) & ads5282_0_data(1) & ads5282_0_data(0)

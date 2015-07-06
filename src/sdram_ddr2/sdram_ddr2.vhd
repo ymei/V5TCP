@@ -33,38 +33,64 @@ ENTITY sdram_ddr2 IS
   GENERIC (
     INDATA_WIDTH   : positive := 256;
     OUTDATA_WIDTH  : positive := 32;
-    APP_ADDR_WIDTH : positive := 31;
+    APP_ADDR_WIDTH : positive := 27;
     APP_DATA_WIDTH : positive := 128;
     APP_MASK_WIDTH : positive := 16;
     APP_ADDR_BURST : positive := 8
   );
   PORT (
-    CLK        : IN    std_logic;
-    CLK200     : IN    std_logic;       -- 200MHz reference clock for iodelay
-    RESET      : IN    std_logic;
-    --
-    DDR2_DQ    : INOUT std_logic_vector(63 DOWNTO 0);
-    DDR2_DQS   : INOUT std_logic_vector(7 DOWNTO 0);
-    DDR2_DQS_N : INOUT std_logic_vector(7 DOWNTO 0);
-    DDR2_A     : OUT   std_logic_vector(12 DOWNTO 0);
-    DDR2_BA    : OUT   std_logic_vector(1 DOWNTO 0);
-    DDR2_RAS_N : OUT   std_logic;
-    DDR2_CAS_N : OUT   std_logic;
-    DDR2_WE_N  : OUT   std_logic;
-    DDR2_CS_N  : OUT   std_logic_vector(0 DOWNTO 0);
-    DDR2_ODT   : OUT   std_logic_vector(0 DOWNTO 0);
-    DDR2_CKE   : OUT   std_logic_vector(0 DOWNTO 0);
-    DDR2_DM    : OUT   std_logic_vector(7 DOWNTO 0);
-    DDR2_CK    : OUT   std_logic_vector(1 DOWNTO 0);
-    DDR2_CK_N  : OUT   std_logic_vector(1 DOWNTO 0);
+    CLK                : IN    std_logic;
+    CLK200             : IN    std_logic;  -- 200MHz clock this module is working with
+    RESET              : IN    std_logic;
+    -- SDRAM DDR2
+    DDR2_DQ            : INOUT std_logic_vector(63 DOWNTO 0);
+    DDR2_DQS           : INOUT std_logic_vector(7 DOWNTO 0);
+    DDR2_DQS_N         : INOUT std_logic_vector(7 DOWNTO 0);
+    DDR2_A             : OUT   std_logic_vector(12 DOWNTO 0);
+    DDR2_BA            : OUT   std_logic_vector(1 DOWNTO 0);
+    DDR2_RAS_N         : OUT   std_logic;
+    DDR2_CAS_N         : OUT   std_logic;
+    DDR2_WE_N          : OUT   std_logic;
+    DDR2_CS_N          : OUT   std_logic_vector(0 DOWNTO 0);
+    DDR2_ODT           : OUT   std_logic_vector(0 DOWNTO 0);
+    DDR2_CKE           : OUT   std_logic_vector(0 DOWNTO 0);
+    DDR2_DM            : OUT   std_logic_vector(7 DOWNTO 0);
+    DDR2_CK            : OUT   std_logic_vector(1 DOWNTO 0);
+    DDR2_CK_N          : OUT   std_logic_vector(1 DOWNTO 0);
     -- Status Outputs
-    PHY_INIT_DONE : OUT std_logic
+    PHY_INIT_DONE      : OUT   std_logic;
+    -- Control
+    CTRL_RESET         : IN    std_logic;
+    WR_START           : IN    std_logic;
+    WR_ADDR_BEGIN      : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+    WR_STOP            : IN    std_logic;
+    WR_WRAP_AROUND     : IN    std_logic;
+    POST_TRIGGER       : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+    WR_BUSY            : OUT   std_logic;
+    WR_POINTER         : OUT   std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+    TRIGGER_POINTER    : OUT   std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+    WR_WRAPPED         : OUT   std_logic;
+    RD_START           : IN    std_logic;
+    RD_ADDR_BEGIN      : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+    RD_ADDR_END        : IN    std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+    RD_BUSY            : OUT   std_logic;
+    -- I/O data fifo
+    DATA_FIFO_RESET    : IN    std_logic;
+    INDATA_FIFO_WRCLK  : IN    std_logic;
+    INDATA_FIFO_Q      : IN    std_logic_vector(INDATA_WIDTH-1 DOWNTO 0);
+    INDATA_FIFO_FULL   : OUT   std_logic;
+    INDATA_FIFO_WREN   : IN    std_logic;
+    --
+    OUTDATA_FIFO_RDCLK : IN    std_logic;
+    OUTDATA_FIFO_Q     : OUT   std_logic_vector(OUTDATA_WIDTH-1 DOWNTO 0);
+    OUTDATA_FIFO_EMPTY : OUT   std_logic;
+    OUTDATA_FIFO_RDEN  : IN    std_logic
   );
 END sdram_ddr2;
 
 ARCHITECTURE Behavioral OF sdram_ddr2 IS
 
-  COMPONENT mig IS
+  COMPONENT mig
     GENERIC (
       BANK_WIDTH            : integer := 2;
       -- # of memory bank addr bits.
@@ -193,6 +219,60 @@ ARCHITECTURE Behavioral OF sdram_ddr2 IS
     );
   END COMPONENT;
 
+  COMPONENT sdram_buffer_fifo
+    GENERIC (
+      INDATA_WIDTH   : positive := 256;
+      OUTDATA_WIDTH  : positive := 32;
+      APP_ADDR_WIDTH : positive := 31;
+      APP_DATA_WIDTH : positive := 128;
+      APP_MASK_WIDTH : positive := 16;
+      APP_ADDR_BURST : positive := 8    -- 4 or 8
+    );
+    PORT (
+      CLK                : IN  std_logic;  -- MIG UI_CLK
+      RESET              : IN  std_logic;
+      --
+      APP_ADDR           : OUT std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      APP_CMD            : OUT std_logic_vector(2 DOWNTO 0);
+      APP_EN             : OUT std_logic;
+      APP_RDY            : IN  std_logic;
+      APP_WDF_DATA       : OUT std_logic_vector(APP_DATA_WIDTH-1 DOWNTO 0);
+      APP_WDF_END        : OUT std_logic;
+      APP_WDF_MASK       : OUT std_logic_vector(APP_MASK_WIDTH-1 DOWNTO 0);
+      APP_WDF_WREN       : OUT std_logic;
+      APP_WDF_RDY        : IN  std_logic;
+      APP_RD_DATA        : IN  std_logic_vector(APP_DATA_WIDTH-1 DOWNTO 0);
+      APP_RD_DATA_END    : IN  std_logic;
+      APP_RD_DATA_VALID  : IN  std_logic;
+      --
+      CTRL_RESET         : IN  std_logic;
+      WR_START           : IN  std_logic;
+      WR_ADDR_BEGIN      : IN  std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      WR_STOP            : IN  std_logic;
+      WR_WRAP_AROUND     : IN  std_logic;
+      POST_TRIGGER       : IN  std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      WR_BUSY            : OUT std_logic;
+      WR_POINTER         : OUT std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      TRIGGER_POINTER    : OUT std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      WR_WRAPPED         : OUT std_logic;
+      RD_START           : IN  std_logic;
+      RD_ADDR_BEGIN      : IN  std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      RD_ADDR_END        : IN  std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+      RD_BUSY            : OUT std_logic;
+      --
+      DATA_FIFO_RESET    : IN  std_logic;
+      INDATA_FIFO_WRCLK  : IN  std_logic;
+      INDATA_FIFO_Q      : IN  std_logic_vector(INDATA_WIDTH-1 DOWNTO 0);
+      INDATA_FIFO_FULL   : OUT std_logic;
+      INDATA_FIFO_WREN   : IN  std_logic;
+      --
+      OUTDATA_FIFO_RDCLK : IN  std_logic;
+      OUTDATA_FIFO_Q     : OUT std_logic_vector(OUTDATA_WIDTH-1 DOWNTO 0);
+      OUTDATA_FIFO_EMPTY : OUT std_logic;
+      OUTDATA_FIFO_RDEN  : IN  std_logic
+    );
+  END COMPONENT;
+
   SIGNAL reset_n           : std_logic;
   SIGNAL rst0_tb           : std_logic;
   SIGNAL clk0_tb           : std_logic;
@@ -201,15 +281,16 @@ ARCHITECTURE Behavioral OF sdram_ddr2 IS
   SIGNAL rd_data_valid     : std_logic;
   SIGNAL app_wdf_wren      : std_logic;
   SIGNAL app_af_wren       : std_logic;
-  SIGNAL app_af_addr       : std_logic_vector(APP_ADDR_WIDTH-1 DOWNTO 0);
+  SIGNAL app_af_addr       : std_logic_vector(30 DOWNTO 0);
   SIGNAL app_af_cmd        : std_logic_vector(2 DOWNTO 0);
   SIGNAL rd_data_fifo_out  : std_logic_vector((APP_DATA_WIDTH-1) DOWNTO 0);
   SIGNAL app_wdf_data      : std_logic_vector((APP_DATA_WIDTH-1) DOWNTO 0);
   SIGNAL app_wdf_mask_data : std_logic_vector((APP_DATA_WIDTH/8-1) DOWNTO 0);
+  SIGNAL app_rdy           : std_logic;
+  SIGNAL app_wdf_rdy       : std_logic;
 
 BEGIN 
 
-  reset_n <= NOT RESET;
   mig_inst : mig
     PORT MAP (
       DDR2_DQ           => DDR2_DQ,
@@ -222,8 +303,8 @@ BEGIN
       DDR2_ODT          => DDR2_ODT,
       DDR2_CKE          => DDR2_CKE,
       DDR2_DM           => DDR2_DM,
-      SYS_CLK           => clk200,
-      IDLY_CLK_200      => clk200,
+      SYS_CLK           => CLK200,
+      IDLY_CLK_200      => CLK200,
       SYS_RST_N         => reset_n,
       PHY_INIT_DONE     => PHY_INIT_DONE,
       RST0_TB           => rst0_tb,     -- reset_n sync-ed to clk200 domain
@@ -244,9 +325,61 @@ BEGIN
       DDR2_CK_N         => DDR2_CK_N
     );
 
-  app_wdf_wren <= '1';
-  app_af_wren  <= '1';
-  app_af_addr  <= (OTHERS => '0');
-  app_af_cmd   <= (OTHERS => '0');
+  reset_n     <= NOT RESET;
+  app_rdy     <= NOT app_af_afull;
+  app_wdf_rdy <= NOT app_wdf_afull;
+  
+  sdram_buffer_fifo_inst : sdram_buffer_fifo
+    GENERIC MAP (
+      INDATA_WIDTH   => INDATA_WIDTH,
+      OUTDATA_WIDTH  => OUTDATA_WIDTH,
+      APP_ADDR_WIDTH => APP_ADDR_WIDTH,
+      APP_DATA_WIDTH => APP_DATA_WIDTH,
+      APP_MASK_WIDTH => APP_MASK_WIDTH,
+      APP_ADDR_BURST => APP_ADDR_BURST
+    )
+    PORT MAP (
+      CLK                => clk0_tb,
+      RESET              => RESET,
+      --
+      APP_ADDR           => app_af_addr(APP_ADDR_WIDTH-1 DOWNTO 0),
+      APP_CMD            => app_af_cmd,
+      APP_EN             => app_af_wren,
+      APP_RDY            => app_rdy,
+      APP_WDF_DATA       => app_wdf_data,
+      APP_WDF_END        => OPEN,
+      APP_WDF_MASK       => app_wdf_mask_data,
+      APP_WDF_WREN       => app_wdf_wren,
+      APP_WDF_RDY        => app_wdf_rdy,
+      APP_RD_DATA        => rd_data_fifo_out,
+      APP_RD_DATA_END    => '0',
+      APP_RD_DATA_VALID  => rd_data_valid,
+      --
+      CTRL_RESET         => CTRL_RESET,
+      WR_START           => WR_START,
+      WR_ADDR_BEGIN      => WR_ADDR_BEGIN,
+      WR_STOP            => WR_STOP,
+      WR_WRAP_AROUND     => WR_WRAP_AROUND,
+      POST_TRIGGER       => POST_TRIGGER,
+      WR_BUSY            => WR_BUSY,
+      WR_POINTER         => WR_POINTER,
+      TRIGGER_POINTER    => TRIGGER_POINTER,
+      WR_WRAPPED         => WR_WRAPPED,
+      RD_START           => RD_START,
+      RD_ADDR_BEGIN      => RD_ADDR_BEGIN,
+      RD_ADDR_END        => RD_ADDR_END,
+      RD_BUSY            => RD_BUSY,
+      --
+      DATA_FIFO_RESET    => DATA_FIFO_RESET,
+      INDATA_FIFO_WRCLK  => INDATA_FIFO_WRCLK,
+      INDATA_FIFO_Q      => INDATA_FIFO_Q,
+      INDATA_FIFO_FULL   => INDATA_FIFO_FULL,
+      INDATA_FIFO_WREN   => INDATA_FIFO_WREN,
+      --
+      OUTDATA_FIFO_RDCLK => OUTDATA_FIFO_RDCLK,
+      OUTDATA_FIFO_Q     => OUTDATA_FIFO_Q,
+      OUTDATA_FIFO_EMPTY => OUTDATA_FIFO_EMPTY,
+      OUTDATA_FIFO_RDEN  => OUTDATA_FIFO_RDEN
+    );
 
 END Behavioral;
