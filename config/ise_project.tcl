@@ -235,6 +235,7 @@ proc add_source_files {} {
    xfile add "../ipcore_dir/cs_icon.xco"
    xfile add "../ipcore_dir/cs_ila.xco"
    xfile add "../ipcore_dir/cs_vio.xco"
+   xfile add "../ipcore_dir/emac_fifo_ram.xco"
    xfile add "../ipcore_dir/fifo128to32.xco"
    xfile add "../ipcore_dir/fifo16to32.xco"
    xfile add "../ipcore_dir/fifo256to128.xco"

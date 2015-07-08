@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="/home/ymei/Work/UltrafastImaging/V5TCP/top/sdram_buffer_fifo_tb_isim_beh.wdb" id="1" type="auto">
+         <top_modules>
+            <top_module name="attributes" />
+            <top_module name="numeric_std" />
+            <top_module name="sdram_buffer_fifo_tb" />
+            <top_module name="std_logic_1164" />
+            <top_module name="std_logic_arith" />
+            <top_module name="std_logic_misc" />
+            <top_module name="std_logic_unsigned" />
+            <top_module name="vcomponents" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <WVObjectSize size="49" />
+   <wvobject fp_name="/sdram_buffer_fifo_tb/clk" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/reset" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">reset</obj_property>
+      <obj_property name="ObjectShortName">reset</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_addr" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">app_addr[4:0]</obj_property>
+      <obj_property name="ObjectShortName">app_addr[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_cmd" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">app_cmd[2:0]</obj_property>
+      <obj_property name="ObjectShortName">app_cmd[2:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_en" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">app_en</obj_property>
+      <obj_property name="ObjectShortName">app_en</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_rdy" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">app_rdy</obj_property>
+      <obj_property name="ObjectShortName">app_rdy</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_wdf_data" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">app_wdf_data[127:0]</obj_property>
+      <obj_property name="ObjectShortName">app_wdf_data[127:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_wdf_end" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">app_wdf_end</obj_property>
+      <obj_property name="ObjectShortName">app_wdf_end</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_wdf_mask" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">app_wdf_mask[15:0]</obj_property>
+      <obj_property name="ObjectShortName">app_wdf_mask[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_wdf_wren" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">app_wdf_wren</obj_property>
+      <obj_property name="ObjectShortName">app_wdf_wren</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_wdf_rdy" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">app_wdf_rdy</obj_property>
+      <obj_property name="ObjectShortName">app_wdf_rdy</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_rd_data" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">app_rd_data[127:0]</obj_property>
+      <obj_property name="ObjectShortName">app_rd_data[127:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_rd_data_end" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">app_rd_data_end</obj_property>
+      <obj_property name="ObjectShortName">app_rd_data_end</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_rd_data_valid" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">app_rd_data_valid</obj_property>
+      <obj_property name="ObjectShortName">app_rd_data_valid</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/ctrl_reset" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">ctrl_reset</obj_property>
+      <obj_property name="ObjectShortName">ctrl_reset</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/wr_start" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">wr_start</obj_property>
+      <obj_property name="ObjectShortName">wr_start</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/indata_fifo_q" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">indata_fifo_q[255:0]</obj_property>
+      <obj_property name="ObjectShortName">indata_fifo_q[255:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/uut/indata_fifo_empty" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">indata_fifo_empty</obj_property>
+      <obj_property name="ObjectShortName">indata_fifo_empty</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/indata_fifo_full" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">indata_fifo_full</obj_property>
+      <obj_property name="ObjectShortName">indata_fifo_full</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/indata_fifo_wren" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">indata_fifo_wren</obj_property>
+      <obj_property name="ObjectShortName">indata_fifo_wren</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/indata_fifo_wrclk" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">indata_fifo_wrclk</obj_property>
+      <obj_property name="ObjectShortName">indata_fifo_wrclk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/wr_addr_begin" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">wr_addr_begin[4:0]</obj_property>
+      <obj_property name="ObjectShortName">wr_addr_begin[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/wr_stop" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">wr_stop</obj_property>
+      <obj_property name="ObjectShortName">wr_stop</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/wr_wrap_around" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">wr_wrap_around</obj_property>
+      <obj_property name="ObjectShortName">wr_wrap_around</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/wr_busy" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">wr_busy</obj_property>
+      <obj_property name="ObjectShortName">wr_busy</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/wr_pointer" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">wr_pointer[4:0]</obj_property>
+      <obj_property name="ObjectShortName">wr_pointer[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/trigger_pointer" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">trigger_pointer[4:0]</obj_property>
+      <obj_property name="ObjectShortName">trigger_pointer[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/wr_wrapped" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">wr_wrapped</obj_property>
+      <obj_property name="ObjectShortName">wr_wrapped</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/rd_start" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">rd_start</obj_property>
+      <obj_property name="ObjectShortName">rd_start</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/rd_addr_begin" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">rd_addr_begin[4:0]</obj_property>
+      <obj_property name="ObjectShortName">rd_addr_begin[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/rd_addr_end" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">rd_addr_end[4:0]</obj_property>
+      <obj_property name="ObjectShortName">rd_addr_end[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/rd_busy" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">rd_busy</obj_property>
+      <obj_property name="ObjectShortName">rd_busy</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/uut/outdata_fifo_full" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_fifo_full</obj_property>
+      <obj_property name="ObjectShortName">outdata_fifo_full</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/uut/outdata_fifo_wren" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_fifo_wren</obj_property>
+      <obj_property name="ObjectShortName">outdata_fifo_wren</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/outdata_fifo_rdclk" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_fifo_rdclk</obj_property>
+      <obj_property name="ObjectShortName">outdata_fifo_rdclk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/outdata_fifo_q" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_fifo_q[31:0]</obj_property>
+      <obj_property name="ObjectShortName">outdata_fifo_q[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/outdata_fifo_empty" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_fifo_empty</obj_property>
+      <obj_property name="ObjectShortName">outdata_fifo_empty</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/outdata_fifo_rden" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_fifo_rden</obj_property>
+      <obj_property name="ObjectShortName">outdata_fifo_rden</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/post_trigger" type="array" db_ref_id="1">
+      <obj_property name="ElementShortName">post_trigger[4:0]</obj_property>
+      <obj_property name="ObjectShortName">post_trigger[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/data_fifo_reset" type="logic" db_ref_id="1">
+      <obj_property name="ElementShortName">data_fifo_reset</obj_property>
+      <obj_property name="ObjectShortName">data_fifo_reset</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/indata_width" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">indata_width</obj_property>
+      <obj_property name="ObjectShortName">indata_width</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/outdata_width" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_width</obj_property>
+      <obj_property name="ObjectShortName">outdata_width</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_addr_width" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">app_addr_width</obj_property>
+      <obj_property name="ObjectShortName">app_addr_width</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_data_width" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">app_data_width</obj_property>
+      <obj_property name="ObjectShortName">app_data_width</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_mask_width" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">app_mask_width</obj_property>
+      <obj_property name="ObjectShortName">app_mask_width</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/app_addr_burst" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">app_addr_burst</obj_property>
+      <obj_property name="ObjectShortName">app_addr_burst</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/clk_period" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">clk_period</obj_property>
+      <obj_property name="ObjectShortName">clk_period</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/indata_fifo_wrclk_period" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">indata_fifo_wrclk_period</obj_property>
+      <obj_property name="ObjectShortName">indata_fifo_wrclk_period</obj_property>
+   </wvobject>
+   <wvobject fp_name="/sdram_buffer_fifo_tb/outdata_fifo_rdclk_period" type="other" db_ref_id="1">
+      <obj_property name="ElementShortName">outdata_fifo_rdclk_period</obj_property>
+      <obj_property name="ObjectShortName">outdata_fifo_rdclk_period</obj_property>
+   </wvobject>
+</wave_config>

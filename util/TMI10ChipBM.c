@@ -362,20 +362,21 @@ int genesys_arm_acquire(int sockfd)
     buf32 = (uint32_t*)buf;
 
     /* disable fmc data fifo wren, disallow trigger */
-    n = cmd_write_register(&buf32, 17, 0x0400); /* also high bits of rd_addr_end */
+    n = cmd_write_register(&buf32, 17, 0x0200); /* also high bits of rd_addr_end */
     n = query_response(sockfd, buf, n, buf, 0);
-    /* reset (clear) fifos */
-    n = cmd_send_pulse(&buf32, 0x200); /* pulse_reg(9) */
-    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
     /* sdram ctrl_reset */
     n = cmd_send_pulse(&buf32, 0x40); /* pulse_reg(6) */
     n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
-    /* enable fmc data fifo wren */
+    /* reset (clear) fifos */
+    n = cmd_send_pulse(&buf32, 0x200); /* pulse_reg(9) */
+    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
+    /* enable adc data fifo wren */
 //    n = cmd_write_register(&buf32, 13, 0x8800); /* also high bits of rd_addr_end */
 //    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
     /* allow trigger */
 //    n = cmd_write_register(&buf32, 13, 0xc800); /* also high bits of rd_addr_end */
 //    n = query_response(sockfd, buf, n, buf, 0);
+
     /* software trigger, for testing */
     Sleep(2);
     n = cmd_send_pulse(&buf32, 0x400); /* pulse_reg(10) */
@@ -403,7 +404,7 @@ int genesys_arm_acquire(int sockfd)
 
 int genesys_read_save(int sockfd)
 {
-#define NBASK (4096 * 32)
+#define NBASK (2048)
     char ibuf[NBASK];
     SCOPE_DATA_TYPE *ibufsd;
     char buf[BUFSIZ];
@@ -423,7 +424,7 @@ int genesys_read_save(int sockfd)
     /* sdram rd_start */
     Sleep(200);
     n = cmd_send_pulse(&buf32, 0x100); /* pulse_reg(8) */
-    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
+    n = query_response(sockfd, buf, n, buf, 0); Sleep(20);
 
     /* read data fifo back */
     ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(int32_t));
@@ -448,7 +449,9 @@ int genesys_read_save(int sockfd)
             if(nsel == 0) {
                 warn("select");
                 error_printf("nb = %zd, readTotal = %zd\n\n", nb, readTotal);
-                signal_kill_handler(0);
+                // close(sockfd);
+                // signal_kill_handler(0);
+                readTotal = NBASK;
                 break;
             }
             if(nsel>0) {
@@ -473,7 +476,12 @@ int genesys_read_save(int sockfd)
             }
         }
         nb += readTotal;
-        
+
+        for(i=0; i<readTotal; i++) {
+            if (i%32 == 0) printf("\n");
+            printf("%02x", (unsigned char)(ibuf[i]));
+        }
+
         // printf("received bytes: %zd\n", nb);
         /*
         for(i=0; i<n/sizeof(uint16_t); i++) {

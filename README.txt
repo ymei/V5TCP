@@ -35,7 +35,7 @@ MIG:
 
     Replace the original unit with M470T6554CZ3-CD5 (512MB, 32Meg x 16
     DDR2-533, CAS L = 4).  It seems to work although the MIG is configured
-    for MT4HTF3264HY-667.
+    for MT4HTF3264HY-667.  Test shows the usable capacity is only 256MB.
 
   Modify the following files, change Y34 to K29 in Bank 15:
     ipcore_dir/mig/example_design/datasheet.txt: ddr2_we# -> Y34
@@ -53,3 +53,5 @@ MIG:
   Set CLK_PERIOD to 10000 (10ns, matching clk_sys) when instantiating the core
     to allow the core itself to generate clocks correctly.
 --------------------------------------------------------------------------------
+EMAC TCP:
+    Set FULL_DUPLEX_ONLY => true in client_side_FIFO_emac0

@@ -394,7 +394,7 @@ BEGIN
   END PROCESS;
   rd_app_cmd        <= DDR_CMD_READ;
   rd_readable       <= APP_RDY AND (NOT outdata_fifo_full) AND (NOT APP_RD_DATA_VALID);
-  outdata_fifo_wren <= APP_RD_DATA_VALID AND rd_reading;
+  outdata_fifo_wren <= APP_RD_DATA_VALID;
 
   -- connect signals
   APP_ADDR <= '0' & std_logic_vector(wr_addr_i(wr_addr_i'length-2 DOWNTO 0))

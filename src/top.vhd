@@ -35,7 +35,7 @@ USE work.common_pkg.ALL;
 
 ENTITY top IS
   GENERIC (
-    includeChipscope : boolean := true
+    includeChipscope : boolean := false
   );
   PORT (
     clk_xtal      : IN    std_logic;
@@ -225,12 +225,13 @@ ARCHITECTURE Behavioral OF top IS
   END COMPONENT;
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< SDRAM
-  CONSTANT SRAM_ADDR_WIDTH : positive := 26;
+  CONSTANT SDRAM_ADDR_WIDTH : positive := 25;
+  -- 25 : 256MB, 26 : 512MB, actual addr width.  +1 for the buffer_fifo is handled.
   COMPONENT sdram_ddr2
     GENERIC (
       INDATA_WIDTH   : positive := 256;
       OUTDATA_WIDTH  : positive := 32;
-      APP_ADDR_WIDTH : positive := SRAM_ADDR_WIDTH+1;
+      APP_ADDR_WIDTH : positive := SDRAM_ADDR_WIDTH+1;
       APP_DATA_WIDTH : positive := 128;
       APP_MASK_WIDTH : positive := 16;
       APP_ADDR_BURST : positive := 8
@@ -496,7 +497,7 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL sdram_phy_init_done               : std_logic;
   SIGNAL sdram_reset                       : std_logic;
   SIGNAL sdram_clk200                      : std_logic;
-  SIGNAL sdram_rd_addr_begin               : std_logic_vector(SRAM_ADDR_WIDTH DOWNTO 0);
+  SIGNAL sdram_rd_addr_begin               : std_logic_vector(SDRAM_ADDR_WIDTH DOWNTO 0);
   SIGNAL sdram_wr_start                    : std_logic;
   SIGNAL sdram_wr_busy                     : std_logic;
   SIGNAL sdram_wr_wrapped                  : std_logic;
@@ -779,17 +780,17 @@ BEGIN
       -- Control
       CTRL_RESET         => pulse_reg(6),
       WR_START           => sdram_wr_start,
-      WR_ADDR_BEGIN      => config_reg(16*12+SRAM_ADDR_WIDTH DOWNTO 16*12),
+      WR_ADDR_BEGIN      => config_reg(16*12+SDRAM_ADDR_WIDTH DOWNTO 16*12),
       WR_STOP            => pulse_reg(7),
       WR_WRAP_AROUND     => config_reg(16*8+31),
-      POST_TRIGGER       => config_reg(16*14+SRAM_ADDR_WIDTH DOWNTO 16*14),
+      POST_TRIGGER       => config_reg(16*14+SDRAM_ADDR_WIDTH DOWNTO 16*14),
       WR_BUSY            => sdram_wr_busy,
       WR_POINTER         => OPEN,
-      TRIGGER_POINTER    => status_reg(SRAM_ADDR_WIDTH DOWNTO 0),
+      TRIGGER_POINTER    => status_reg(SDRAM_ADDR_WIDTH DOWNTO 0),
       WR_WRAPPED         => sdram_wr_wrapped,
       RD_START           => sdram_rd_start,
       RD_ADDR_BEGIN      => sdram_rd_addr_begin,
-      RD_ADDR_END        => config_reg(16*16+SRAM_ADDR_WIDTH DOWNTO 16*16),
+      RD_ADDR_END        => config_reg(16*16+SDRAM_ADDR_WIDTH DOWNTO 16*16),
       RD_BUSY            => sdram_rd_busy,
       --
       DATA_FIFO_RESET    => sdram_data_fifo_reset,
@@ -805,28 +806,39 @@ BEGIN
     );
   sdram_rd_start        <= pulse_reg(8) OR BTN(1);
   sdram_data_fifo_reset <= pulse_reg(9);
+  sdram_data_fifo_rdclk <= control_data_fifo_rdclk;
   status_reg(16*2)      <= sdram_wr_busy;
-  usr_data_output(6)    <= sdram_wr_busy;  
+  usr_data_output(6)    <= sdram_wr_busy;
   status_reg(16*2+1)    <= sdram_wr_wrapped;
   usr_data_output(5)    <= sdram_wr_wrapped;
   status_reg(16*2+2)    <= sdram_rd_busy;
   usr_data_output(4)    <= sdram_rd_busy;
   sdram_rd_addr_begin   <= (OTHERS => '0');
 
+  usr_data_output(2) <= sdram_data_fifo_empty;
+  PROCESS (sdram_data_fifo_rdclk, reset, sdram_data_fifo_reset, BTN(2)) IS
+  BEGIN
+    IF reset = '1' OR sdram_data_fifo_reset = '1' OR BTN(2) = '1' THEN
+      usr_data_output(3) <= '0';
+    ELSIF rising_edge(sdram_data_fifo_rdclk) THEN
+      IF sdram_data_fifo_empty = '1' AND sdram_rd_busy = '1' THEN
+        usr_data_output(3) <= '1';
+      END IF;
+    END IF;
+  END PROCESS;
   -- select source to read from into the control interface data fifo
-  --sdram_data_fifo_rdclk   <= control_data_fifo_rdclk;
-  --control_data_fifo_q     <= sdram_data_fifo_dout;
-  --control_data_fifo_empty <= sdram_data_fifo_empty;
-  --sdram_data_fifo_rden    <= control_data_fifo_rdreq;
-  control_data_fifo_q   <= sdram_data_fifo_dout WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-                         ELSE fifo96_reduced_q;
-  control_data_fifo_empty <= '0';
+  control_data_fifo_q     <= sdram_data_fifo_dout;
+  control_data_fifo_empty <= sdram_data_fifo_empty WHEN DIPSw8Bit(6) = '0' ELSE '0';
+  sdram_data_fifo_rden    <= control_data_fifo_rdreq OR DIPSw8Bit(5);
+
+  --control_data_fifo_q <= sdram_data_fifo_dout WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+  --                       ELSE fifo96_reduced_q;
   --control_data_fifo_empty <= sdram_data_fifo_empty WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
   --                           ELSE fifo96_reduced_empty;
-  sdram_data_fifo_rden <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-                          ELSE '0';
-  fifo96_reduced_rdreq <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-                          ELSE '0';
+  --sdram_data_fifo_rden <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+  --                        ELSE '0';
+  --fifo96_reduced_rdreq <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+  --                        ELSE '0';
 
   -- for memory write continuity test
   sdram_wr_start         <= pulse_reg(10) OR BTN(0);
@@ -837,10 +849,10 @@ BEGIN
     VARIABLE counter : unsigned(sdram_idata_fifo_q'length-1 DOWNTO 0) := (OTHERS => '0');
   BEGIN
     IF rising_edge(sdram_idata_fifo_wrclk) THEN
-      sdram_idata_fifo_q <= std_logic_vector(counter);
       IF sdram_idata_fifo_full = '0' THEN
         counter := counter + 1;
       END IF;
+      sdram_idata_fifo_q <= std_logic_vector(counter);
     END IF;
   END PROCESS;
   ---------------------------------------------> SDRAM
@@ -931,7 +943,7 @@ BEGIN
       led_cnt <= led_cnt + 1;
     END IF;
   END PROCESS;
-  usr_data_output(3 DOWNTO 0) <= std_logic_vector(led_cnt(25 DOWNTO 22));
+  usr_data_output(3-2 DOWNTO 0) <= std_logic_vector(led_cnt(25-2 DOWNTO 22));
   usr_data_output(7)          <= sdram_phy_init_done;
   led_obufs : FOR i IN 0 TO 7 GENERATE
     led_obuf : OBUF

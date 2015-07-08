@@ -159,7 +159,7 @@ BEGIN
   sDinA(31 DOWNTO 16) <= CMD_FIFO_Q(15 DOWNTO 0);
 
   -- data fifo
-  DATA_FIFO_RDCLK <= NOT CLK;
+  DATA_FIFO_RDCLK <= CLK;
   DATA_FIFO_RDREQ <= sDataFIFOrdreq;
 
   -- data/event FIFO

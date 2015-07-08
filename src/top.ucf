@@ -127,8 +127,9 @@ TIMEGRP "gmii_rx_0" OFFSET = IN 2 ns VALID 2 ns BEFORE "gmii_rx_clk_0" RISING;
 # EMAC0 LocalLink client FIFO constraints.
 
 INST "*client_side_FIFO_emac0?tx_fifo_i?rd_tran_frame_tog"    TNM = "tx_fifo_rd_to_wr_0";
-INST "*client_side_FIFO_emac0?tx_fifo_i?rd_retran_frame_tog"  TNM = "tx_fifo_rd_to_wr_0";
-INST "*client_side_FIFO_emac0?tx_fifo_i?rd_col_window_pipe_1" TNM = "tx_fifo_rd_to_wr_0";
+# commented out when FULL_DUPLEX_ONLY => true in client_side_FIFO_emac0
+# INST "*client_side_FIFO_emac0?tx_fifo_i?rd_retran_frame_tog"  TNM = "tx_fifo_rd_to_wr_0";
+# INST "*client_side_FIFO_emac0?tx_fifo_i?rd_col_window_pipe_1" TNM = "tx_fifo_rd_to_wr_0";
 INST "*client_side_FIFO_emac0?tx_fifo_i?rd_addr_txfer*"       TNM = "tx_fifo_rd_to_wr_0";
 INST "*client_side_FIFO_emac0?tx_fifo_i?rd_txfer_tog"         TNM = "tx_fifo_rd_to_wr_0";
 INST "*client_side_FIFO_emac0?tx_fifo_i?wr_frame_in_fifo"     TNM = "tx_fifo_wr_to_rd_0";
@@ -141,8 +142,9 @@ INST "*client_side_FIFO_emac0?tx_fifo_i?wr_tran_frame_tog"    TNM = "tx_metastab
 INST "*client_side_FIFO_emac0?tx_fifo_i?wr_rd_addr*"          TNM = "tx_metastable_0";
 INST "*client_side_FIFO_emac0?tx_fifo_i?wr_txfer_tog"         TNM = "tx_metastable_0";
 INST "*client_side_FIFO_emac0?tx_fifo_i?frame_in_fifo"        TNM = "tx_metastable_0";
-INST "*client_side_FIFO_emac0?tx_fifo_i?wr_retran_frame_tog*" TNM = "tx_metastable_0";
-INST "*client_side_FIFO_emac0?tx_fifo_i?wr_col_window_pipe_0" TNM = "tx_metastable_0";
+# commented out when FULL_DUPLEX_ONLY => true in client_side_FIFO_emac0
+# INST "*client_side_FIFO_emac0?tx_fifo_i?wr_retran_frame_tog*" TNM = "tx_metastable_0";
+# INST "*client_side_FIFO_emac0?tx_fifo_i?wr_col_window_pipe_0" TNM = "tx_metastable_0";
 
 TIMESPEC "ts_tx_meta_protect_0" = FROM "tx_metastable_0" 5 ns DATAPATHONLY;
 
@@ -176,8 +178,8 @@ AREA_GROUP "AG_v5_emac" RANGE = CLOCKREGION_X1Y2,CLOCKREGION_X1Y3 ;
 Net "*globalresetter_inst/GLOBAL_RST*" TIG;
 Net "*control_interface_inst/sConfigReg*" TNM = "config_reg";
 TIMESPEC "TS_config_reg" = FROM "config_reg" TIG;
-Net "*control_interface_inst/sRegOut*" TNM = "status_reg";
-TIMESPEC "TS_status_reg" = TO "status_reg" TIG;
+# Net "*control_interface_inst/sRegOut*" TNM = "status_reg";
+# TIMESPEC "TS_status_reg" = TO "status_reg" TIG;
 
 # Set IODELAY_GROUP constraint for IDELAYCTRL
 INST "*dlyctrl0"   IODELAY_GROUP = IG_v5_emac;
@@ -360,7 +362,7 @@ NET "VHDCI2N<19>" LOC = "AP32";  # BANK = 13, Pin name = IO_L19N_13,        Sch 
 
 #<-- SDRAM DDR2 --
 
-NET "*sdram_clk200" TNM_NET =  "SYS_CLK";
+NET "*sdram_clk200" TNM_NET = "SYS_CLK";
 TIMESPEC "TS_SYS_CLK" = PERIOD "SYS_CLK" 5 ns HIGH 50 %;
 
 ########################################################################
