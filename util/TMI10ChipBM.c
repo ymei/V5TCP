@@ -313,7 +313,7 @@ int genesys_prepare(int sockfd)
     /* rd_addr_end */
     n = cmd_write_register(&buf32, 16, 0x0000); /* low bits */
     n = query_response(sockfd, buf, n, buf, 0);
-    /* data path selection */
+    /* data path (source) selection */
     n = cmd_write_register(&buf32, 10, 0x0003);
     n = query_response(sockfd, buf, n, buf, 0);
 
@@ -341,12 +341,12 @@ int genesys_prepare(int sockfd)
         break;
     }
     val |=  (avgMask<<8);
-    n = cmd_write_register(&buf32, 14, val);
-    n = query_response(sockfd, buf, n, buf, 0);
+    // n = cmd_write_register(&buf32, 14, val);
+    // n = query_response(sockfd, buf, n, buf, 0);
 
     /* reference clock frequency division factor (2**n) */
-    n = cmd_write_register(&buf32, 15, 3);
-    n = query_response(sockfd, buf, n, buf, 0);
+    // n = cmd_write_register(&buf32, 15, 3);
+    // n = query_response(sockfd, buf, n, buf, 0);
 
     return 1;
 }
@@ -371,17 +371,17 @@ int genesys_arm_acquire(int sockfd)
     n = cmd_send_pulse(&buf32, 0x200); /* pulse_reg(9) */
     n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
     /* enable adc data fifo wren */
-//    n = cmd_write_register(&buf32, 13, 0x8800); /* also high bits of rd_addr_end */
-//    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
+    n = cmd_write_register(&buf32, 17, 0x8200); /* also high bits of rd_addr_end */
+    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
     /* allow trigger */
-//    n = cmd_write_register(&buf32, 13, 0xc800); /* also high bits of rd_addr_end */
-//    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 17, 0xc200); /* also high bits of rd_addr_end */
+    n = query_response(sockfd, buf, n, buf, 0);
 
     /* software trigger, for testing */
-    Sleep(2);
-    n = cmd_send_pulse(&buf32, 0x400); /* pulse_reg(10) */
-    n = query_response(sockfd, buf, n, buf, 0);
-#if 0    
+    // Sleep(2);
+    // n = cmd_send_pulse(&buf32, 0x400); /* pulse_reg(10) */
+    // n = query_response(sockfd, buf, n, buf, 0);
+
     finished = 0;
     do {
         /* check if we've got a trigger AND completed write */
@@ -391,20 +391,20 @@ int genesys_arm_acquire(int sockfd)
         n = cmd_read_status(&buf32, 0);
         n = query_response(sockfd, buf, n, buf, 4);
         printf("Trigger pointer low: 0x%04x\n", ((uint16_t)buf[2]<<8) | (uint16_t)buf[3]);
-        n = cmd_read_status(&buf32, 2);
+        n = cmd_read_status(&buf32, 1);
         n = query_response(sockfd, buf, n, buf, 4);
         status = ((uint16_t)buf[2]<<8) | (uint16_t)buf[3];
         printf("0, RD_BUSY, WR_WRAPPED, WR_BUSY, Trigger pointer high: 0x%04hx\n", status);
         finished = status & 0x2000;
     } while(finished == 0);
-#endif
+
     printf("Got trigger and write is done!\n");
     return 1;
 }
 
 int genesys_read_save(int sockfd)
 {
-#define NBASK (2048)
+#define NBASK (4096 * 32)
     char ibuf[NBASK];
     SCOPE_DATA_TYPE *ibufsd;
     char buf[BUFSIZ];
@@ -412,7 +412,7 @@ int genesys_read_save(int sockfd)
     size_t nb, ncmd;
     ssize_t n, iCh, iP, i, j;
     /**/
-    struct timeval tv; /* tv should be re-initialized in the loop since select
+    struct timeval tv; /* tv should be re-initialized in the loop since select()
                           may change it after each call */
     int maxfd, nsel;
     fd_set rfd;
@@ -476,12 +476,12 @@ int genesys_read_save(int sockfd)
             }
         }
         nb += readTotal;
-
+/*
         for(i=0; i<readTotal; i++) {
             if (i%32 == 0) printf("\n");
             printf("%02x", (unsigned char)(ibuf[i]));
         }
-
+*/
         // printf("received bytes: %zd\n", nb);
         /*
         for(i=0; i<n/sizeof(uint16_t); i++) {

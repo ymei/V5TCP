@@ -54,4 +54,8 @@ MIG:
     to allow the core itself to generate clocks correctly.
 --------------------------------------------------------------------------------
 EMAC TCP:
-    Set FULL_DUPLEX_ONLY => true in client_side_FIFO_emac0
+    Set FULL_DUPLEX_ONLY => true in client_side_fifo_emac0
+    When built-in FIFO is used in control_interface (data_fifo : fifo36x512),
+    Its size should be no smaller than the FIFO read request size (NBASK)
+    in the TCP read program.  Changing the fifo to BRAM type (512 writes)
+    eliminated the problem.

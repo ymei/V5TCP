@@ -37,6 +37,11 @@ ENTITY gig_eth IS
     GMII_CRS_0           : IN  std_logic;
     PHY_RST_n            : OUT std_logic;
     -- TCP
+    MAC_ADDR             : IN std_logic_vector(47 DOWNTO 0);
+    IPv4_ADDR            : IN std_logic_vector(31 DOWNTO 0);
+    IPv6_ADDR            : IN std_logic_vector(127 DOWNTO 0);
+    SUBNET_MASK          : IN std_logic_vector(31 DOWNTO 0);
+    GATEWAY_IP_ADDR      : IN std_logic_vector(31 DOWNTO 0);
     TCP_CONNECTION_RESET : IN  std_logic;
     TX_TDATA             : IN  std_logic_vector(7 DOWNTO 0);
     TX_TVALID            : IN  std_logic;
@@ -362,11 +367,11 @@ BEGIN
       --//-- CONFIGURATION
       -- configuration signals are synchonous with CLK
       -- Synchronous with CLK clock.
-      MAC_ADDR        => x"00183e010f04",
-      IPv4_ADDR       => x"c0a80204",
-      IPv6_ADDR       => (OTHERS => '0'),
-      SUBNET_MASK     => x"ffffff00",
-      GATEWAY_IP_ADDR => x"c0a80201",
+      MAC_ADDR        => MAC_ADDR,
+      IPv4_ADDR       => IPv4_ADDR,
+      IPv6_ADDR       => IPv6_ADDR,
+      SUBNET_MASK     => SUBNET_MASK,
+      GATEWAY_IP_ADDR => GATEWAY_IP_ADDR,
       -- local IP address. 4 bytes for IPv4, 16 bytes for IPv6
       -- Natural order (MSB) 172.16.1.128 (LSB) as transmitted in the IP frame.
 

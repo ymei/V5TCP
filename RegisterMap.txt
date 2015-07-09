@@ -8,13 +8,12 @@ config_reg      bits            purpose
 6               16              topmetal trig delay
 8,9             32              ads5282
 10              16              ads5282 data selection
-12,13           32              sdram wr_addr_begin
+12,13           32              sdram WR_WRAP_AROUND, wr_addr_begin
 14,15           32              sdram post_trigger
-16,17           32              sdram rd_addr_end
+16,17           32              sdram idata_fifo_wren, trig_allow, rd_addr_end
 
 status_reg
-0,1             32              sdram trigger_pointer
-2               16              sdram status
+0,1             32              sdram 0, RD_BUSY, WR_WRAPPED, WR_BUSY, trigger_pointer
 
 pulse_reg
 0                               enforced trigger output

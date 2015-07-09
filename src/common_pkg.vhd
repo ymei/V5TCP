@@ -30,8 +30,33 @@ LIBRARY UNISIM;
 USE UNISIM.VComponents.ALL;
 
 PACKAGE common_pkg IS
+
+  COMPONENT pulse2pulse
+    PORT (
+      IN_CLK   : IN  std_logic;
+      OUT_CLK  : IN  std_logic;
+      RST      : IN  std_logic;
+      PULSEIN  : IN  std_logic;
+      INBUSY   : OUT std_logic;
+      PULSEOUT : OUT std_logic
+    );
+  END COMPONENT;
+
+  COMPONENT edge_sync IS
+    GENERIC (
+      EDGE : std_logic := '1'  -- '1'  :  rising edge,  '0' falling edge
+    );
+    PORT (
+      RESET : IN  std_logic;
+      CLK   : IN  std_logic;
+      EI    : IN  std_logic;
+      SO    : OUT std_logic
+    );
+  END COMPONENT;
+
   CONSTANT ADS5282BITS : positive := 12;
   TYPE ADS5282DATA IS ARRAY (integer RANGE <>) OF std_logic_vector(ADS5282BITS-1 DOWNTO 0);
+
 END common_pkg;
 
 PACKAGE BODY common_pkg IS

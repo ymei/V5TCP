@@ -140,6 +140,11 @@ ARCHITECTURE Behavioral OF top IS
       GMII_CRS_0           : IN  std_logic;
       PHY_RST_n            : OUT std_logic;
       -- TCP
+      MAC_ADDR             : IN std_logic_vector(47 DOWNTO 0);
+      IPv4_ADDR            : IN std_logic_vector(31 DOWNTO 0);
+      IPv6_ADDR            : IN std_logic_vector(127 DOWNTO 0);
+      SUBNET_MASK          : IN std_logic_vector(31 DOWNTO 0);
+      GATEWAY_IP_ADDR      : IN std_logic_vector(31 DOWNTO 0);
       TCP_CONNECTION_RESET : IN  std_logic;
       TX_TDATA             : IN  std_logic_vector(7 DOWNTO 0);
       TX_TVALID            : IN  std_logic;
@@ -451,6 +456,10 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL cs_vio_asyncout : std_logic_vector (17 DOWNTO 0);
   ---------------------------------------------> Chipscope signals
   ---------------------------------------------< gig_eth
+  SIGNAL gig_eth_mac_addr                  : std_logic_vector(47 DOWNTO 0);
+  SIGNAL gig_eth_ipv4_addr                 : std_logic_vector(31 DOWNTO 0);
+  SIGNAL gig_eth_subnet_mask               : std_logic_vector(31 DOWNTO 0);
+  SIGNAL gig_eth_gateway_ip_addr           : std_logic_vector(31 DOWNTO 0);
   SIGNAL gig_eth_tx_tdata                  : std_logic_vector(7 DOWNTO 0);
   SIGNAL gig_eth_tx_tvalid                 : std_logic;
   SIGNAL gig_eth_tx_tready                 : std_logic;  
@@ -512,6 +521,9 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL sdram_data_fifo_dout              : std_logic_vector(31 DOWNTO 0);
   SIGNAL sdram_data_fifo_empty             : std_logic;
   SIGNAL sdram_data_fifo_rden              : std_logic;
+  SIGNAL sdram_trig_allow                  : std_logic;
+  SIGNAL sdram_trig_in                     : std_logic;
+  SIGNAL sdram_trig_synced                 : std_logic;
   ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
   SIGNAL dac_sclk                          : std_logic;
@@ -624,6 +636,17 @@ BEGIN
   END GENERATE IncChipScope;
   ---------------------------------------------> Chipscope
   ---------------------------------------------< gig_eth
+  PROCESS (clk_125MHz) IS
+  BEGIN  -- Make configurations synchronous to CLK125 of the gig_eth module
+    IF rising_edge(clk_125MHz) THEN
+      gig_eth_mac_addr(gig_eth_mac_addr'length-1 DOWNTO 4)   <= x"00183e010f0";
+      gig_eth_mac_addr(3 DOWNTO 0)                           <= DIPSw8Bit(3 DOWNTO 0);
+      gig_eth_ipv4_addr(gig_eth_ipv4_addr'length-1 DOWNTO 4) <= x"c0a8020";
+      gig_eth_ipv4_addr(3 DOWNTO 0)                          <= DIPSw8Bit(3 DOWNTO 0);
+      gig_eth_subnet_mask                                    <= x"ffffff00";
+      gig_eth_gateway_ip_addr                                <= x"c0a80201";
+    END IF;
+  END PROCESS;
   gig_eth_inst : gig_eth
     PORT MAP (
       -- asynchronous reset
@@ -645,6 +668,11 @@ BEGIN
       GMII_CRS_0           => GMII_CRS_0,
       PHY_RST_n            => PHY_RST_n,
       -- TCP
+      MAC_ADDR             => gig_eth_mac_addr,
+      IPv4_ADDR            => gig_eth_ipv4_addr,
+      IPv6_ADDR            => (OTHERS => '0'),
+      SUBNET_MASK          => gig_eth_subnet_mask,
+      GATEWAY_IP_ADDR      => gig_eth_gateway_ip_addr,
       TCP_CONNECTION_RESET => '0',
       TX_TDATA             => gig_eth_tx_tdata,
       TX_TVALID            => gig_eth_tx_tvalid,
@@ -782,7 +810,7 @@ BEGIN
       WR_START           => sdram_wr_start,
       WR_ADDR_BEGIN      => config_reg(16*12+SDRAM_ADDR_WIDTH DOWNTO 16*12),
       WR_STOP            => pulse_reg(7),
-      WR_WRAP_AROUND     => config_reg(16*8+31),
+      WR_WRAP_AROUND     => config_reg(16*12+31),
       POST_TRIGGER       => config_reg(16*14+SDRAM_ADDR_WIDTH DOWNTO 16*14),
       WR_BUSY            => sdram_wr_busy,
       WR_POINTER         => OPEN,
@@ -807,44 +835,32 @@ BEGIN
   sdram_rd_start        <= pulse_reg(8) OR BTN(1);
   sdram_data_fifo_reset <= pulse_reg(9);
   sdram_data_fifo_rdclk <= control_data_fifo_rdclk;
-  status_reg(16*2)      <= sdram_wr_busy;
-  usr_data_output(6)    <= sdram_wr_busy;
-  status_reg(16*2+1)    <= sdram_wr_wrapped;
-  usr_data_output(5)    <= sdram_wr_wrapped;
-  status_reg(16*2+2)    <= sdram_rd_busy;
-  usr_data_output(4)    <= sdram_rd_busy;
   sdram_rd_addr_begin   <= (OTHERS => '0');
+  status_reg(0+28)      <= sdram_wr_busy;
+  status_reg(0+29)      <= sdram_wr_wrapped;
+  status_reg(0+30)      <= sdram_rd_busy;
+  --
+  usr_data_output(6)    <= sdram_wr_busy;
+  usr_data_output(5)    <= sdram_wr_wrapped;
+  usr_data_output(4)    <= sdram_rd_busy;
+  usr_data_output(3)    <= sdram_data_fifo_empty;
 
-  usr_data_output(2) <= sdram_data_fifo_empty;
-  PROCESS (sdram_data_fifo_rdclk, reset, sdram_data_fifo_reset, BTN(2)) IS
-  BEGIN
-    IF reset = '1' OR sdram_data_fifo_reset = '1' OR BTN(2) = '1' THEN
-      usr_data_output(3) <= '0';
-    ELSIF rising_edge(sdram_data_fifo_rdclk) THEN
-      IF sdram_data_fifo_empty = '1' AND sdram_rd_busy = '1' THEN
-        usr_data_output(3) <= '1';
-      END IF;
-    END IF;
-  END PROCESS;
   -- select source to read from into the control interface data fifo
-  control_data_fifo_q     <= sdram_data_fifo_dout;
-  control_data_fifo_empty <= sdram_data_fifo_empty WHEN DIPSw8Bit(6) = '0' ELSE '0';
-  sdram_data_fifo_rden    <= control_data_fifo_rdreq OR DIPSw8Bit(5);
+  --control_data_fifo_q     <= sdram_data_fifo_dout;
+  --control_data_fifo_empty <= sdram_data_fifo_empty WHEN DIPSw8Bit(6) = '0' ELSE '0';
+  --sdram_data_fifo_rden    <= control_data_fifo_rdreq OR DIPSw8Bit(5);
 
-  --control_data_fifo_q <= sdram_data_fifo_dout WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-  --                       ELSE fifo96_reduced_q;
-  --control_data_fifo_empty <= sdram_data_fifo_empty WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-  --                           ELSE fifo96_reduced_empty;
-  --sdram_data_fifo_rden <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-  --                        ELSE '0';
-  --fifo96_reduced_rdreq <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-  --                        ELSE '0';
+  control_data_fifo_q <= sdram_data_fifo_dout WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                         ELSE fifo96_reduced_q;
+  control_data_fifo_empty <= sdram_data_fifo_empty WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                             ELSE fifo96_reduced_empty;
+  sdram_data_fifo_rden <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                          ELSE '0';
+  fifo96_reduced_rdreq <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) /= "11"
+                          ELSE '0';
 
   -- for memory write continuity test
-  sdram_wr_start         <= pulse_reg(10) OR BTN(0);
   sdram_idata_fifo_wrclk <= clk_50MHz;
-  sdram_idata_fifo_wren  <= '1';
-  -- cs_trig0(32)        <= sdram_idata_fifo_full;
   PROCESS (sdram_idata_fifo_wrclk) IS
     VARIABLE counter : unsigned(sdram_idata_fifo_q'length-1 DOWNTO 0) := (OTHERS => '0');
   BEGIN
@@ -855,6 +871,21 @@ BEGIN
       sdram_idata_fifo_q <= std_logic_vector(counter);
     END IF;
   END PROCESS;
+  -- trigger
+  sdram_trig_in <= BTN(3);
+  -- capture the rising edge of trigger
+  trig_edge_sync_inst : edge_sync
+    PORT MAP (
+      RESET => reset,
+      CLK   => control_clk,
+      EI    => sdram_trig_in,
+      SO    => sdram_trig_synced
+    );
+  sdram_idata_fifo_wren <= config_reg(16*16+31);
+  sdram_trig_allow      <= config_reg(16*16+30);
+  sdram_wr_start <= pulse_reg(10) OR BTN(0) OR (sdram_trig_synced AND sdram_trig_allow
+                                                AND (NOT sdram_wr_busy)
+                                                AND (NOT sdram_wr_wrapped));
   ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
   dac8568_inst : fifo2shiftreg
