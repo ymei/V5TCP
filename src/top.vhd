@@ -636,17 +636,12 @@ BEGIN
   END GENERATE IncChipScope;
   ---------------------------------------------> Chipscope
   ---------------------------------------------< gig_eth
-  PROCESS (clk_125MHz) IS
-  BEGIN  -- Make configurations synchronous to CLK125 of the gig_eth module
-    IF rising_edge(clk_125MHz) THEN
-      gig_eth_mac_addr(gig_eth_mac_addr'length-1 DOWNTO 4)   <= x"00183e010f0";
-      gig_eth_mac_addr(3 DOWNTO 0)                           <= DIPSw8Bit(3 DOWNTO 0);
-      gig_eth_ipv4_addr(gig_eth_ipv4_addr'length-1 DOWNTO 4) <= x"c0a8020";
-      gig_eth_ipv4_addr(3 DOWNTO 0)                          <= DIPSw8Bit(3 DOWNTO 0);
-      gig_eth_subnet_mask                                    <= x"ffffff00";
-      gig_eth_gateway_ip_addr                                <= x"c0a80201";
-    END IF;
-  END PROCESS;
+  gig_eth_mac_addr(gig_eth_mac_addr'length-1 DOWNTO 4)   <= x"00183e010f0";
+  gig_eth_mac_addr(3 DOWNTO 0)                           <= DIPSw8Bit(3 DOWNTO 0);
+  gig_eth_ipv4_addr(gig_eth_ipv4_addr'length-1 DOWNTO 4) <= x"c0a8020";
+  gig_eth_ipv4_addr(3 DOWNTO 0)                          <= DIPSw8Bit(3 DOWNTO 0);
+  gig_eth_subnet_mask                                    <= x"ffffff00";
+  gig_eth_gateway_ip_addr                                <= x"c0a80201";
   gig_eth_inst : gig_eth
     PORT MAP (
       -- asynchronous reset
