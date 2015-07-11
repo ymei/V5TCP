@@ -8,9 +8,11 @@
 -- Project Name: 
 -- Target Devices: 
 -- Tool versions: 
--- Description: 
+-- Description:    By default the falling edge of SCLK is aligned at the center
+--                 of DOUT.  Invert SCLK ouput when necessary.  MSB of DATA is
+--                 shifted out first.
 --
--- Dependencies: 
+-- dependencies: 
 --
 -- Revision: 
 -- Revision 0.01 - File Created
@@ -37,9 +39,10 @@ ENTITY shiftreg_drive IS
   PORT (
     CLK   : IN  std_logic;              -- clock
     RESET : IN  std_logic;              -- reset
-    -- data input
+    -- input data interface
     DATA  : IN  std_logic_vector(WIDTH-1 DOWNTO 0);
     START : IN  std_logic;
+    BUSY  : OUT std_logic;
     -- output
     SCLK  : OUT std_logic;
     DOUT  : OUT std_logic;
@@ -49,18 +52,17 @@ END shiftreg_drive;
 
 ARCHITECTURE Behavioral OF shiftreg_drive IS
 
-  SIGNAL sclk_buf   : std_logic;
-  SIGNAL dout_buf   : std_logic;
-  SIGNAL sync_n_buf : std_logic;
-  SIGNAL clk_cnt    : unsigned(CLK_DIV DOWNTO 0);
-  SIGNAL clk_cnt_p  : unsigned(CLK_DIV DOWNTO 0) := ('1', OTHERS => '0');
-  SIGNAL data_reg   : std_logic_vector(WIDTH-1 DOWNTO 0);
-  SIGNAL data_pos   : integer RANGE 0 TO WIDTH;
-  SIGNAL busy       : std_logic;
-  SIGNAL done       : std_logic;
+  SIGNAL sclk_buf    : std_logic;
+  SIGNAL dout_buf    : std_logic;
+  SIGNAL sync_n_buf  : std_logic;
+  SIGNAL clk_cnt     : unsigned(CLK_DIV DOWNTO 0);
+  CONSTANT clk_cnt_p : unsigned(CLK_DIV DOWNTO 0) := ('1', OTHERS => '0');
+  SIGNAL data_reg    : std_logic_vector(WIDTH-1 DOWNTO 0);
+  SIGNAL data_pos    : integer RANGE 0 TO WIDTH;
+  SIGNAL done        : std_logic;
   --
-  TYPE   driveState_t IS (S0, S1, S2);
-  SIGNAL driveState : driveState_t;
+  TYPE driveState_t IS (S0, S1, S2);
+  SIGNAL driveState  : driveState_t;
 
 BEGIN 
 
@@ -77,27 +79,30 @@ BEGIN
   data_proc : PROCESS (CLK, RESET)
   BEGIN
     IF RESET = '1' THEN
+      BUSY       <= '0';
       driveState <= S0;
       sync_n_buf <= '1';
     ELSIF rising_edge(CLK) THEN
       CASE driveState IS
         WHEN S0 =>
           sync_n_buf <= '1';
-          IF START = '1' THEN
-            data_reg   <= DATA;          -- register DATA
+          IF START = '1' THEN           -- START is level triggered
+            BUSY       <= '1';
+            data_reg   <= DATA;         -- register DATA
             data_pos   <= WIDTH;
             driveState <= S1;
           END IF;
 
         WHEN S1 =>
           driveState <= S1;
-          IF clk_cnt = clk_cnt_p-1 THEN  -- rising_edge of sclk
+          IF clk_cnt = clk_cnt_p-1 THEN -- rising_edge of sclk
             sync_n_buf <= '0';
             IF data_pos > 0 THEN 
               dout_buf <= data_reg(data_pos-1);
               data_pos <= data_pos - 1;                
             ELSE
               sync_n_buf <= '1';
+              BUSY       <= '0';
               driveState <= S0;
             END IF;
           END IF;

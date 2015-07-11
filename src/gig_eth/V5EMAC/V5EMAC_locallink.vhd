@@ -423,7 +423,7 @@ begin
    ----------------------------------------------------------------------
    client_side_FIFO_emac0 : eth_fifo_8
      generic map (
-       FULL_DUPLEX_ONLY     => false)
+       FULL_DUPLEX_ONLY     => true)
      port map (
        -- Transmitter MAC Client Interface
        tx_clk               => tx_clk_0_i,

@@ -8,7 +8,7 @@
 -- Module Name:    top - Behavioral 
 -- Project Name: 
 -- Target Devices: Virtex-5 xc5vlx50t-1ff1136
--- Tool versions: ISE 14.5
+-- Tool versions: ISE 14.7
 -- Description: 
 --
 -- Dependencies: 
@@ -30,6 +30,8 @@ USE ieee.numeric_std.ALL;
 -- any Xilinx primitives in this code.
 LIBRARY UNISIM;
 USE UNISIM.VComponents.ALL;
+
+USE work.common_pkg.ALL;
 
 ENTITY top IS
   GENERIC (
@@ -123,6 +125,11 @@ ARCHITECTURE Behavioral OF top IS
       GMII_CRS_0           : IN  std_logic;
       PHY_RST_n            : OUT std_logic;
       -- TCP
+      MAC_ADDR             : IN std_logic_vector(47 DOWNTO 0);
+      IPv4_ADDR            : IN std_logic_vector(31 DOWNTO 0);
+      IPv6_ADDR            : IN std_logic_vector(127 DOWNTO 0);
+      SUBNET_MASK          : IN std_logic_vector(31 DOWNTO 0);
+      GATEWAY_IP_ADDR      : IN std_logic_vector(31 DOWNTO 0);
       TCP_CONNECTION_RESET : IN  std_logic;
       TX_TDATA             : IN  std_logic_vector(7 DOWNTO 0);
       TX_TVALID            : IN  std_logic;
@@ -243,19 +250,24 @@ ARCHITECTURE Behavioral OF top IS
       TM_SPEAK_S    : OUT std_logic
     );
   END COMPONENT;
-  COMPONENT shiftreg_drive
+  COMPONENT fifo2shiftreg
     GENERIC (
-      WIDTH   : positive :=32;            -- parallel data width
-      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
+      WIDTH   : positive := 32;         -- parallel data width
+      CLK_DIV : positive := 2           -- SCLK freq is CLK / 2**(CLK_DIV)
     );
-    PORT(
-      CLK   : IN  std_logic;
-      RESET : IN  std_logic;
-      DATA  : IN  std_logic_vector(31 DOWNTO 0);
-      START : IN  std_logic;
-      SCLK  : OUT std_logic;
-      DOUT  : OUT std_logic;
-      SYNCn : OUT std_logic
+    PORT (
+      CLK      : IN  std_logic;         -- clock
+      RESET    : IN  std_logic;         -- reset
+      -- input data interface
+      WR_CLK   : IN  std_logic;         -- FIFO write clock
+      DIN      : IN  std_logic_vector(15 DOWNTO 0);
+      WR_EN    : IN  std_logic;
+      WR_PULSE : IN  std_logic;  -- one pulse writes one word, regardless of pulse duration
+      FULL     : OUT std_logic;
+      -- output
+      SCLK     : OUT std_logic;
+      DOUT     : OUT std_logic;
+      SYNCn    : OUT std_logic
     );
   END COMPONENT;
   ---------------------------------------------> Topmetal
@@ -317,6 +329,10 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL cs_vio_asyncout : std_logic_vector (17 DOWNTO 0);
   ---------------------------------------------> Chipscope signals
   ---------------------------------------------< gig_eth
+  SIGNAL gig_eth_mac_addr                  : std_logic_vector(47 DOWNTO 0);
+  SIGNAL gig_eth_ipv4_addr                 : std_logic_vector(31 DOWNTO 0);
+  SIGNAL gig_eth_subnet_mask               : std_logic_vector(31 DOWNTO 0);
+  SIGNAL gig_eth_gateway_ip_addr           : std_logic_vector(31 DOWNTO 0);
   SIGNAL gig_eth_tx_tdata                  : std_logic_vector(7 DOWNTO 0);
   SIGNAL gig_eth_tx_tvalid                 : std_logic;
   SIGNAL gig_eth_tx_tready                 : std_logic;  
@@ -356,7 +372,6 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL control_mem_dout                  : std_logic_vector(31 DOWNTO 0);
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
-  SIGNAL dac_cnt                           : unsigned(5 DOWNTO 0);
   SIGNAL led_cnt                           : unsigned(25 DOWNTO 0);
   SIGNAL tm_rst                            : std_logic;
   SIGNAL adc_refclk                        : std_logic;
@@ -364,7 +379,7 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_sram_d                         : std_logic_vector(4 DOWNTO 0);
   SIGNAL tm_sram_we                        : std_logic;
   ---------------------------------------------> Topmetal
-  SIGNAL usr_data_output    : std_logic_vector (7 DOWNTO 0);
+  SIGNAL usr_data_output                   : std_logic_vector (7 DOWNTO 0);
 
 BEGIN
   UART_TX_PIN <= 'Z';
@@ -432,6 +447,12 @@ BEGIN
   END GENERATE IncChipScope;
   ---------------------------------------------> Chipscope
   ---------------------------------------------< gig_eth
+  gig_eth_mac_addr(gig_eth_mac_addr'length-1 DOWNTO 4)   <= x"00183e010f0";
+  gig_eth_mac_addr(3 DOWNTO 0)                           <= DIPSw8Bit(3 DOWNTO 0);
+  gig_eth_ipv4_addr(gig_eth_ipv4_addr'length-1 DOWNTO 4) <= x"c0a8020";
+  gig_eth_ipv4_addr(3 DOWNTO 0)                          <= DIPSw8Bit(3 DOWNTO 0);
+  gig_eth_subnet_mask                                    <= x"ffffff00";
+  gig_eth_gateway_ip_addr                                <= x"c0a80201";
   gig_eth_inst : gig_eth
     PORT MAP (
       -- asynchronous reset
@@ -453,6 +474,11 @@ BEGIN
       GMII_CRS_0           => GMII_CRS_0,
       PHY_RST_n            => PHY_RST_n,
       -- TCP
+      MAC_ADDR             => gig_eth_mac_addr,
+      IPv4_ADDR            => gig_eth_ipv4_addr,
+      IPv6_ADDR            => (OTHERS => '0'),
+      SUBNET_MASK          => gig_eth_subnet_mask,
+      GATEWAY_IP_ADDR      => gig_eth_gateway_ip_addr,
       TCP_CONNECTION_RESET => '0',
       TX_TDATA             => gig_eth_tx_tdata,
       TX_TVALID            => gig_eth_tx_tvalid,
@@ -556,44 +582,46 @@ BEGIN
   cs_vio_asyncin        <= config_reg(71 DOWNTO 36);
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
-  PROCESS (clk_50MHz, reset)
-  BEGIN
-    IF reset = '1' then
-      dac_cnt <= (OTHERS => '0');
-    ELSIF rising_edge(clk_50MHz) then
-      dac_cnt <= dac_cnt + 1;
-    END IF;
-  END PROCESS;
-
   -- on the `bottom' board
-  dac8568_inst : shiftreg_drive
+  dac8568_inst : fifo2shiftreg
     GENERIC MAP (
-      WIDTH   => 32,           -- parallel data width
-      CLK_DIV => 8             -- SCLK freq is CLK / 2**(CLK_DIV+1)
+      WIDTH   => 32,                    -- parallel data width
+      CLK_DIV => 8                      -- SCLK freq is CLK / 2**(CLK_DIV+1)
     )
     PORT MAP (
-      CLK   => control_clk,
-      RESET => tm_rst,
-      DATA  => config_reg(16*9-1 DOWNTO 16*7),
-      START => pulse_reg(1),
-      SCLK  => JD(5),
-      DOUT  => JD(4),
-      SYNCn => JD(6)
+      CLK      => control_clk,          -- clock
+      RESET    => tm_rst,               -- reset
+      -- input data interface
+      WR_CLK   => control_clk,          -- FIFO write clock
+      DIN      => config_reg(16*7+15 DOWNTO 16*7),
+      WR_EN    => '0',
+      WR_PULSE => pulse_reg(1),  -- one pulse writes one word, regardless of pulse duration
+      FULL     => OPEN,
+      -- output
+      SCLK     => JD(5),
+      DOUT     => JD(4),
+      SYNCn    => JD(6)
     );
+
   -- topmetal internal DAC
-  topmetal_dac_inst : shiftreg_drive
+  topmetal_dac_inst : fifo2shiftreg
     GENERIC MAP (
-      WIDTH   => 32,           -- parallel data width
-      CLK_DIV => 10            -- SCLK freq is CLK / 2**(CLK_DIV+1)
+      WIDTH   => 32,                    -- parallel data width
+      CLK_DIV => 10                     -- SCLK freq is CLK / 2**(CLK_DIV+1)
     )
     PORT MAP (
-      CLK   => control_clk,
-      RESET => tm_rst,
-      DATA  => config_reg(16*11-1 DOWNTO 16*9),
-      START => pulse_reg(2),
-      SCLK  => JD(2),
-      DOUT  => JD(3),
-      SYNCn => OPEN
+      CLK      => control_clk,          -- clock
+      RESET    => tm_rst,               -- reset
+      -- input data interface
+      WR_CLK   => control_clk,          -- FIFO write clock
+      DIN      => config_reg(16*8+15 DOWNTO 16*8),
+      WR_EN    => '0',
+      WR_PULSE => pulse_reg(2),  -- one pulse writes one word, regardless of pulse duration
+      FULL     => OPEN,
+      -- output
+      SCLK     => JD(2),
+      DOUT     => JD(3),
+      SYNCn    => OPEN
     );
   JD(7)<='0';  --DAC_VREF_MODE, 0 means using internal bandgap reference
   --
