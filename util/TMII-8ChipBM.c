@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * TMI10ChipBM host port ...
+ * TMII-8ChipBM host port ...
  */
 
 /* waitpid on linux */
@@ -37,17 +37,20 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
+#include <netinet/in.h>
 #include <netdb.h>
 
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 
-#ifdef __linux /* on linux */
+#if defined(__linux) /* on linux */
 #include <pty.h>
 #include <utmp.h>
-#else /* (__APPLE__ & __MACH__) */
-#include <util.h> /* this is for mac or bsd */
+#elif defined(__FreeBSD__)
+#include <libutil.h>
+#else /* defined(__APPLE__) && defined(__MACH__) */
+#include <util.h>
 #endif
 
 #include <paths.h>
@@ -67,7 +70,7 @@
 static time_t startTime, stopTime;
 
 static unsigned int chMask;
-static unsigned int avgMask;
+static unsigned int decimMask;
 static size_t nCh;
 static size_t nEvents;
 static struct hdf5io_waveform_file *waveformFile;
@@ -285,6 +288,157 @@ end:
 /******************************************************************************/
 
 /******************************************************************************/
+int configure_dac(int sockfd, char *buf)
+{
+    uint32_t *buf32, val;
+    size_t n;
+    buf32 = (uint32_t*)buf;
+    /* DAC8568 for analog frontend */
+    /* turn on internal vref = 2.5V, so the output is val/65536.0 * 5.0 [V] */
+#define DACVolt(x) ((uint16_t)((double)(x)/5.0 * 65536.0))
+    n = cmd_write_register(&buf32, 0, 0x0800);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 0, 0x0001);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* write and update output1 */
+    val = (0x03<<24) | (0x00 << 20) | (DACVolt(1.0) << 4);
+    n = cmd_write_register(&buf32, 0, (val & 0xffff0000)>>16);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 0, val & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* write and update output2 */
+    val = (0x03<<24) | (0x01 << 20) | (DACVolt(2.5) << 4);
+    n = cmd_write_register(&buf32, 0, (val & 0xffff0000)>>16);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_write_register(&buf32, 0, val & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+    n = query_response(sockfd, buf, n, buf, 0);
+
+    return 1;
+#undef DACVolt
+}
+
+int configure_adc(int sockfd, char *buf, int opt)
+{
+#define write32breg(raddr,paddr) do {                                   \
+        /* register addr and pulse addr */                              \
+        n = cmd_write_register(&buf32, raddr, val & 0xffff);            \
+        n = query_response(sockfd, buf, n, buf, 0);                     \
+        n = cmd_write_register(&buf32, raddr+1, (val>>16) & 0xffff);    \
+        n = query_response(sockfd, buf, n, buf, 0);                     \
+        n = cmd_send_pulse(&buf32, (1<<paddr) & 0xffff);                \
+        n = query_response(sockfd, buf, n, buf, 0);                     \
+    } while (0);
+
+    int df[8]={0};
+    uint16_t ds[8], da, db;
+    uint32_t *buf32, val;
+    size_t n, sampleBytes = 1024;
+    ssize_t i, j;
+
+    buf32 = (uint32_t*)buf;
+    /* reset ads5282_interface module */
+    n = cmd_send_pulse(&buf32, (1<<3) & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    Sleep(2);
+    /* serial data, low 24 bit is effective */
+    val = 0x80000000 | (0x00<<16) | 0x0001 ; /* RST */
+    write32breg(8,2); Sleep(2);
+    val = 0x80000000 | (0x42<<16) | 0x8041 ; /* differential clock and PHASE_DDR */
+    write32breg(8,2);
+    val = 0x80000000 | (0x11<<16) | 0x0444 ; /* drive strength */
+    write32breg(8,2);
+    val = 0x80000000 | (0x12<<16) | 0x4444 ; /* termination */
+    write32breg(8,2);
+    val = 0x80000000 | (0x25<<16) | 0x0000 ; /* 0x0040: EN_RAMP */
+    write32breg(8,2);
+    if(opt==1) {
+        val = 0x80000000 | (0x45<<16) | 0x0001 ; /* 0x0001: PAT_DESKEW, 0x0002: PAT_SYNC */
+        write32breg(8,2);
+    }
+    /* configAddr is high 26 bits, bufrRSTAddr = 0x7fffffc0, lclkIodelayCtrlAddr = 0x7fffff80 */
+    /* low 6 bits set lclkIodelayCtrlPW */
+    /* bufrRST */
+    val = 0x7fffffc0;
+    write32breg(8,2);
+    /* iodelay, 0~63 taps, each tap is 5ns/64 */
+    val = 0x7fffff80 | 0x00; /* lclk, equivalent of negative delay of data.  0x07 seems to be a boundary */
+    write32breg(8,2);
+    for(i=0; i<8; i++) {
+        val = ((i+0)<<6 | 0x0d) & 0x7fffffff; /* data, 0x22 seems to be a boundary */
+        write32breg(8,2);
+        val = ((i+8)<<6 | 0x0d) & 0x7fffffff;
+        write32breg(8,2);
+    }    
+    /* bit slip */
+    for(i=0; i<8; i++) {
+        val = ((i+16)<<6 | 0x04) & 0x7fffffff;
+        write32breg(8,2);
+        val = ((i+24)<<6 | 0x03) & 0x7fffffff;
+        write32breg(8,2);
+    }
+    Sleep(2);
+    if(opt==1) {
+        /* data source to fifo96 */
+        n = cmd_write_register(&buf32, 10, 0x0000);
+        n = query_response(sockfd, buf, n, buf, 0);
+        /* write to fifo96 */
+        n = cmd_send_pulse(&buf32, (1<<5) & 0xffff);
+        n = query_response(sockfd, buf, n, buf, 0);
+        Sleep(2);
+        /* read fifo96 */
+        n = cmd_read_datafifo(&buf32, sampleBytes/sizeof(int32_t));
+        n = query_response(sockfd, buf, n, buf, sampleBytes);
+
+        for(i=0; i<sampleBytes-12; i+=12) {
+            for(j=0; j<8; j+=2) {
+                da = buf[i+j],   db = buf[i+j+1], ds[j]   = ((da<<4) & 0x0ff0) | ((db>>4) & 0x000f);
+                da = buf[i+j+1], db = buf[i+j+2], ds[j+1] = ((da<<8) & 0x0f00) | ((db>>0) & 0x00ff);
+                if(ds[j] != 0x0555) df[j]++;
+                if(ds[j+1] != 0x0555) df[j+1]++;
+                debug_printf(" 0x%04x 0x%04x", ds[j], ds[j+1]);
+            }
+            debug_printf("\n");
+        }
+        n = 0;
+        for(j=0; j<8; j++) if(df[j]) n++;
+        if(n) {
+            error_printf("Not all bits are aligned!  Number of non-0x0555s:\n");
+            for(j=0; j<8; j++)
+                error_printf(" %6d", df[j]);
+            error_printf("\n");
+        } else {
+            printf("ADC configured successfully.\n");
+        }
+
+        /*
+          for(i=0; i<sampleBytes; i++) {
+          if(i>0 && i%8==0)
+          printf("\n");
+          printf(" 0x%02x", (unsigned char)(buf[i]));
+          }
+          printf("\n");
+        */
+    }
+    val = 0x80000000 | (0x45<<16) | 0x0000 ; /* disable PAT_ */
+    write32breg(8,2);
+    Sleep(4);
+
+    return n; /* 0 means ADC is successfully configured */
+
+#undef write32breg
+}
 
 int genesys_prepare(int sockfd)
 {
@@ -295,10 +449,11 @@ int genesys_prepare(int sockfd)
     ssize_t i;
 
     buf32 = (uint32_t*)buf;
-    
-    // configure_adc(sockfd, buf);
+
+    /* adc, iodelay etc. */
+    configure_adc(sockfd, buf, 0);
     /* dac */
-    // configure_dac(sockfd, buf);
+    configure_dac(sockfd, buf);
 
     /* wr_addr_begin */
     n = cmd_write_register(&buf32, 12, 0x0000);
@@ -317,32 +472,9 @@ int genesys_prepare(int sockfd)
     n = cmd_write_register(&buf32, 10, 0x0003);
     n = query_response(sockfd, buf, n, buf, 0);
 
-    /* select channel & average */
-    switch(nCh) {
-    case 1:
-        for(val = 0x0000; (((chMask>>val) & (0x0001)) == 0) && (val<16) ; val++) {;}
-        break;
-    case 4:
-        val = 0x0010;
-        if(chMask & 0x000f) val |= 0x0000;
-        if(chMask & 0x00f0) val |= 0x0001;
-        if(chMask & 0x0f00) val |= 0x0002;
-        if(chMask & 0xf000) val |= 0x0003;
-        break;
-    case 8:
-        val = 0x0020;
-        if(chMask & 0x00ff) val |= 0x0000;
-        if(chMask & 0xff00) val |= 0x0001;
-        break;
-    case 16:
-        val = 0x0030; break;
-    default:
-        val = 0x0000;
-        break;
-    }
-    val |=  (avgMask<<8);
-    // n = cmd_write_register(&buf32, 14, val);
-    // n = query_response(sockfd, buf, n, buf, 0);
+    /* channel decimation, low 4-bit is stride, high 4-bit is offset */
+    n = cmd_write_register(&buf32, 7, decimMask);
+    n = query_response(sockfd, buf, n, buf, 0);
 
     /* reference clock frequency division factor (2**n) */
     // n = cmd_write_register(&buf32, 15, 3);
@@ -378,15 +510,15 @@ int genesys_arm_acquire(int sockfd)
     n = query_response(sockfd, buf, n, buf, 0);
 
     /* software trigger, for testing */
-    // Sleep(2);
-    // n = cmd_send_pulse(&buf32, 0x400); /* pulse_reg(10) */
-    // n = query_response(sockfd, buf, n, buf, 0);
+    Sleep(2);
+    n = cmd_send_pulse(&buf32, 0x400); /* pulse_reg(10) */
+    n = query_response(sockfd, buf, n, buf, 0);
 
     finished = 0;
     do {
         /* check if we've got a trigger AND completed write */
         /* allow time to fill the front-end memory */
-        Sleep(120);        
+        Sleep(100);
         /* check status */
         n = cmd_read_status(&buf32, 0);
         n = query_response(sockfd, buf, n, buf, 4);
@@ -404,7 +536,7 @@ int genesys_arm_acquire(int sockfd)
 
 int genesys_read_save(int sockfd)
 {
-#define NBASK (4096 * 32)
+#define NBASK (4096*32)
     char ibuf[NBASK];
     SCOPE_DATA_TYPE *ibufsd;
     char buf[BUFSIZ];
@@ -447,8 +579,7 @@ int genesys_read_save(int sockfd)
                 break;
             }
             if(nsel == 0) {
-                warn("select");
-                error_printf("nb = %zd, readTotal = %zd\n\n", nb, readTotal);
+                error_printf("select timed out!  nb = %zd, readTotal = %zd\n\n", nb, readTotal);
                 // close(sockfd);
                 // signal_kill_handler(0);
                 readTotal = NBASK;
@@ -476,22 +607,23 @@ int genesys_read_save(int sockfd)
             }
         }
         nb += readTotal;
-/*
+        /*
         for(i=0; i<readTotal; i++) {
             if (i%32 == 0) printf("\n");
             printf("%02x", (unsigned char)(ibuf[i]));
         }
-*/
+        */
         // printf("received bytes: %zd\n", nb);
         /*
-        for(i=0; i<n/sizeof(uint16_t); i++) {
-            // printf("%6hd ", buf16[i]>>2);
-            printf("0x%04hx ", buf16[i]); fflush(stdout);
-            if(i%8 == 7) printf("\n");
+        for(i=0; i<readTotal/sizeof(SCOPE_DATA_TYPE); i++) {
+            if(i%8 == 0) printf("\n");
+            // printf("%6hd ", ibufsd[i]>>2);
+            printf("0x%04hx ", ibufsd[i]);
         }
+        printf("\n");
         */
         /* test data continuity from a counter */ /*
-        for(i=0; i<n/sizeof(uint16_t); i+=8) {
+        for(i=0; i<readTotal/sizeof(uint16_t); i+=8) {
             t2 = 0;
             for(k=4; k<8; k++) {
                 t3 = buf16[i+k];
@@ -536,9 +668,10 @@ int main(int argc, char **argv)
     size_t nWfmPerChunk = 1;
 
     if(argc<7) {
-        error_printf("%s scopeAdddress scopePort outFileName chMask(0x..) avgMask nEvents nWfmPerChunk\n",
+        error_printf("%s scopeAdddress scopePort outFileName chMask(0x..) decimMask nEvents nWfmPerChunk\n",
                      argv[0]);
-        error_printf("avgMask(0x..): high 4-bit is offset, 2**(low 4-bit) is number of points to average\n");
+        error_printf("chMask must be 0xff\n");
+        error_printf("decimMask(0x..): high 4-bit is offset, low 4-bit is stride\n");
         return EXIT_FAILURE;
     }
     scopeAddress = argv[1];
@@ -546,6 +679,7 @@ int main(int argc, char **argv)
     outFileName = argv[3];
     errno = 0;
     chMask = strtol(argv[4], &p, 16);
+    chMask = 0xff; /* enforced all-channel readout */
     v = chMask;
     for(c=0; v; c++) v &= v - 1; /* Brian Kernighan's way of counting bits */
     nCh = c;
@@ -558,27 +692,27 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     errno = 0;
-    avgMask = strtol(argv[5], &p, 16);
+    decimMask = strtol(argv[5], &p, 16);
     if(errno != 0 || *p != 0 || p == argv[5]) {
-        error_printf("Invalid avgMask input: %s\n", argv[5]);
+        error_printf("Invalid decimMask input: %s\n", argv[5]);
         return EXIT_FAILURE;
     }
     nEvents = atol(argv[6]);
     if(argc>7)
         nWfmPerChunk = atol(argv[7]);
     
-    debug_printf("outFileName: %s, chMask: 0x%04x, nCh: %zd, avgMask: 0x%02x, nEvents: %zd, nWfmPerChunk: %zd\n",
-                 outFileName, chMask, nCh, avgMask, nEvents, nWfmPerChunk);
+    debug_printf("outFileName: %s, chMask: 0x%04x, nCh: %zd, decimMask: 0x%02x, nEvents: %zd, nWfmPerChunk: %zd\n",
+                 outFileName, chMask, nCh, decomMask, nEvents, nWfmPerChunk);
 
     waveformAttr.chMask  = chMask;
     waveformAttr.nPt     = SCOPE_MEM_LENGTH_MAX * (SCOPE_NCH / nCh);
     waveformAttr.nFrames = 0;
-    waveformAttr.dt      = 8.0e-9 * (1<<(0xf & avgMask));
+    waveformAttr.dt      = 40.0e-9 * (0xf & decimMask);
     waveformAttr.t0      = 0.0;
     for(i=0; i<SCOPE_NCH; i++) {
-        /* 14bit ADC, filled to high bits of 16-bit words, polarity reversed, 2Vpp full scale */
+        /* 12bit ADC, filled to high bits of 16-bit words, polarity reversed, 2Vpp full scale */
         waveformAttr.ymult[i] = -2.0 / (1<<16);
-        /* ADC outputs 2's compliment, so 0 is 0.0V */
+        /* ADC outputs straight binary */
         waveformAttr.yoff[i]  = 0.0;
         /* DAC controlled electrical offset at input */
         waveformAttr.yzero[i] = dac_offset_volt;

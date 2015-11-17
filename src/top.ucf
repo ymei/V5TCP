@@ -271,7 +271,7 @@ Net "VHDCI2P<9>" TNM_NET = ADC_LCLK2;
 TIMESPEC "TS_ADC_LCLK2" = PERIOD "ADC_LCLK2" 390 MHz HIGH 50 %;
 
 INST "*ads5282_idelayctrl0*" LOC = "IDELAYCTRL_X0Y2";
-INST "*ads5282_idelayctrl1*" LOC = "IDELAYCTRL_X0Y3";
+#INST "*ads5282_idelayctrl1*" LOC = "IDELAYCTRL_X0Y3";
 
 # VHDCI_1
 NET "VHDCI1P<0>"  LOC = "B32";  # BANK = 11, Pin name = IO_L0P_11,           Sch name = EXP-IO1_P

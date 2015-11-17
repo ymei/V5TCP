@@ -117,7 +117,7 @@ ARCHITECTURE Behavioral OF sdram_buffer_fifo IS
       RST        : IN  std_logic;
       WR_CLK     : IN  std_logic;
       RD_CLK     : IN  std_logic;
-      DIN        : IN  std_logic_vector(255 DOWNTO 0);
+      DIN        : IN  std_logic_vector(INDATA_WIDTH-1 DOWNTO 0);
       WR_EN      : IN  std_logic;
       RD_EN      : IN  std_logic;
       DOUT       : OUT std_logic_vector(127 DOWNTO 0);

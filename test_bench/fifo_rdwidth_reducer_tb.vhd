@@ -41,8 +41,9 @@ ARCHITECTURE behavior OF fifo_rdwidth_reducer_tb IS
 
   COMPONENT fifo_rdwidth_reducer
     GENERIC (
-      RDWIDTH : positive := 32;
-      RDRATIO : positive := 3
+      RDWIDTH    : positive := 32;
+      RDRATIO    : positive := 3;
+      SHIFTORDER : positive := 1          -- 1: MSB first, 0: LSB first
     );
     PORT(
       RESET : IN  std_logic;
@@ -98,8 +99,9 @@ BEGIN
   -- Instantiate the Unit Under Test (UUT)
   uut : fifo_rdwidth_reducer
     GENERIC MAP (
-      RDWIDTH => 32,
-      RDRATIO => 3
+      RDWIDTH    => 32,
+      RDRATIO    => 3,
+      SHIFTORDER => 1   -- 1: MSB first, 0: LSB first
     )
     PORT MAP (
       RESET => RESET,

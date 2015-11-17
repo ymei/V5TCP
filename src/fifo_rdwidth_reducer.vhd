@@ -33,8 +33,9 @@ USE UNISIM.VComponents.ALL;
 
 ENTITY fifo_rdwidth_reducer IS
   GENERIC (
-    RDWIDTH : positive := 32;
-    RDRATIO : positive := 3
+    RDWIDTH    : positive := 32;
+    RDRATIO    : positive := 3;
+    SHIFTORDER : positive := 1          -- 1: MSB first, 0: LSB first
   );
   PORT (
     RESET : IN  std_logic;
@@ -104,6 +105,6 @@ BEGIN
   END PROCESS data_proc;
 
   -- output
-  DOUT <= dbuf(RDWIDTH*(soP+1)-1 DOWNTO RDWIDTH*soP);
-
+  DOUT <= dbuf(RDWIDTH*(RDRATIO-soP)-1 DOWNTO RDWIDTH*(RDRATIO-soP-1)) WHEN SHIFTORDER = 1 ELSE
+          dbuf(RDWIDTH*(soP+1)-1 DOWNTO RDWIDTH*soP);
 END Behavioral;

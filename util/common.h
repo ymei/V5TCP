@@ -3,10 +3,10 @@
 
 #define HDF5IO(name) hdf5io_ ## name
 
-#define SCOPE_NCH 1
-#define SCOPE_MEM_LENGTH_MAX 268435456 /* 256MiB memory, (8-bit X 1-ch) per point */
-#define SCOPE_DATA_TYPE uint8_t
-#define SCOPE_DATA_HDF5_TYPE H5T_NATIVE_UINT8
+#define SCOPE_NCH 8
+#define SCOPE_MEM_LENGTH_MAX 16777216 /* 256MiB memory, (16-bit X 8-ch) per point */
+#define SCOPE_DATA_TYPE uint16_t
+#define SCOPE_DATA_HDF5_TYPE H5T_NATIVE_UINT16
 
 struct waveform_attribute 
 {

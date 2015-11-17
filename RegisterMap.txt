@@ -6,6 +6,7 @@ config_reg      bits            purpose
 4               16              topmetal trig control
 5               16              topmetal clock source
 6               16              topmetal trig delay
+7                8              channel_decim
 8,9             32              ads5282
 10              16              ads5282 data selection
 12,13           32              sdram WR_WRAP_AROUND, wr_addr_begin
