@@ -4,7 +4,7 @@
 -- 
 -- Create Date:    23:56:58 1/19/2015
 -- Design Name:    Topmetal II- analog scan driver
--- Module Name:    topmetal_iiminux_analog - Behavioral
+-- Module Name:    topmetal_iiminus_analog - Behavioral
 -- Project Name: 
 -- Target Devices: 
 -- Tool versions: 

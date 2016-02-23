@@ -75,6 +75,8 @@ ENTITY top IS
     VHDCI2P       : INOUT std_logic_vector(19 DOWNTO 0);
     VHDCI2N       : INOUT std_logic_vector(19 DOWNTO 0)
   );
+  ATTRIBUTE clock_dedicated_route          : string;
+  ATTRIBUTE clock_dedicated_route OF JA    : SIGNAL IS "false";
 END top;
 
 ARCHITECTURE Behavioral OF top IS
@@ -250,6 +252,32 @@ ARCHITECTURE Behavioral OF top IS
       TM_SPEAK_S    : OUT std_logic
     );
   END COMPONENT;
+  COMPONENT topmetal_iiminus_digital
+    GENERIC (
+      CLK_DIV_WIDTH  : positive := 16;
+      DATA_OUT_WIDTH : positive := 32
+    );
+    PORT (
+      CLK         : IN  std_logic;      -- clock to be derived from
+      RESET       : IN  std_logic;      -- reset    
+      CLK_DIV     : IN  std_logic_vector(3 DOWNTO 0);  -- log2(CLK_DIV_WIDTH), CLK/(2**CLK_DIV)
+      --
+      CLK_D       : OUT std_logic;      -- clock sent to chip's digital part
+      CLK_FB      : IN  std_logic;      -- clock fed back from the chip
+      READY_P     : IN  std_logic;
+      READY_N     : IN  std_logic;
+      ADDR_P      : IN  std_logic_vector(6 DOWNTO 0);
+      ADDR_N      : IN  std_logic_vector(6 DOWNTO 0);
+      TIME_P      : IN  std_logic_vector(9 DOWNTO 0);
+      TIME_N      : IN  std_logic_vector(9 DOWNTO 0);
+      MARKERD_P   : IN  std_logic;
+      MARKERD_N   : IN  std_logic;
+      --
+      MARKERD_OUT : OUT std_logic;
+      DATA_CLK    : OUT std_logic;
+      DATA_OUT    : OUT std_logic_vector(DATA_OUT_WIDTH-1 DOWNTO 0)
+    );
+  END COMPONENT;
   COMPONENT fifo2shiftreg
     GENERIC (
       WIDTH   : positive := 32;         -- parallel data width
@@ -271,6 +299,40 @@ ARCHITECTURE Behavioral OF top IS
     );
   END COMPONENT;
   ---------------------------------------------> Topmetal
+  ---------------------------------------------< Data readback
+  COMPONENT fifo36x512
+    PORT (
+      RST    : IN  std_logic;
+      WR_CLK : IN  std_logic;
+      RD_CLK : IN  std_logic;
+      DIN    : IN  std_logic_vector(35 DOWNTO 0);
+      WR_EN  : IN  std_logic;
+      RD_EN  : IN  std_logic;
+      DOUT   : OUT std_logic_vector(35 DOWNTO 0);
+      FULL   : OUT std_logic;
+      EMPTY  : OUT std_logic
+    );
+  END COMPONENT;
+  COMPONENT fifo_rdwidth_reducer
+    GENERIC (
+      RDWIDTH    : positive := 32;
+      RDRATIO    : positive := 3;
+      SHIFTORDER : positive := 1        -- 1: MSB first, 0: LSB first
+    );
+    PORT (
+      RESET : IN  std_logic;
+      CLK   : IN  std_logic;
+      -- input data interface
+      DIN   : IN  std_logic_vector(RDWIDTH*RDRATIO-1 DOWNTO 0);
+      VALID : IN  std_logic;
+      RDREQ : OUT std_logic;
+      -- output
+      DOUT  : OUT std_logic_vector(RDWIDTH-1 DOWNTO 0);
+      EMPTY : OUT std_logic;
+      RD_EN : IN  std_logic
+    );
+  END COMPONENT;
+  ---------------------------------------------> Data readback
   ---------------------------------------------< Chipscope
   COMPONENT cs_icon
     PORT (
@@ -370,6 +432,11 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL control_mem_addr                  : std_logic_vector(31 DOWNTO 0);
   SIGNAL control_mem_din                   : std_logic_vector(31 DOWNTO 0);
   SIGNAL control_mem_dout                  : std_logic_vector(31 DOWNTO 0);
+  --
+  SIGNAL control_data_fifo_q               : std_logic_vector(31 DOWNTO 0);
+  SIGNAL control_data_fifo_rdclk           : std_logic;
+  SIGNAL control_data_fifo_rdreq           : std_logic;
+  SIGNAL control_data_fifo_empty           : std_logic;
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
   SIGNAL led_cnt                           : unsigned(25 DOWNTO 0);
@@ -378,7 +445,24 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_trig_out                       : std_logic;
   SIGNAL tm_sram_d                         : std_logic_vector(4 DOWNTO 0);
   SIGNAL tm_sram_we                        : std_logic;
+  SIGNAL tm_addr_p                         : std_logic_vector(6 DOWNTO 0);
+  SIGNAL tm_addr_n                         : std_logic_vector(6 DOWNTO 0);
+  SIGNAL tm_time_p                         : std_logic_vector(9 DOWNTO 0);
+  SIGNAL tm_time_n                         : std_logic_vector(9 DOWNTO 0);
+  SIGNAL tm_data_clk                       : std_logic;
+  SIGNAL tm_data_d                         : std_logic_vector(31 DOWNTO 0);
   ---------------------------------------------> Topmetal
+  ---------------------------------------------< Data readback
+  SIGNAL fifo36_din                        : std_logic_vector(35 DOWNTO 0);
+  SIGNAL fifo36_wrclk                      : std_logic;
+  SIGNAL fifo36_wren                       : std_logic;
+  SIGNAL fifo36_full                       : std_logic;
+  SIGNAL fifo36_dout                       : std_logic_vector(35 DOWNTO 0);
+  SIGNAL fifo36_rden                       : std_logic;
+  SIGNAL fifo36_empty                      : std_logic;
+  SIGNAL fifo36_valid                      : std_logic;
+  SIGNAL fifo36_trig                       : std_logic;
+  ---------------------------------------------> Data readback
   SIGNAL usr_data_output                   : std_logic_vector (7 DOWNTO 0);
 
 BEGIN
@@ -571,10 +655,10 @@ BEGIN
       MEM_DIN         => control_mem_din,
       MEM_DOUT        => control_mem_dout,
       -- Data FIFO interface, FWFT
-      DATA_FIFO_Q     => (OTHERS => '0'),
-      DATA_FIFO_EMPTY => '0',
-      DATA_FIFO_RDREQ => OPEN,
-      DATA_FIFO_RDCLK => OPEN
+      DATA_FIFO_Q     => control_data_fifo_q,
+      DATA_FIFO_EMPTY => control_data_fifo_empty,
+      DATA_FIFO_RDREQ => control_data_fifo_rdreq,
+      DATA_FIFO_RDCLK => control_data_fifo_rdclk
     );
   control_clk           <= clk_125MHz;
   cs_trig0(18 DOWNTO 3) <= pulse_reg;
@@ -664,13 +748,68 @@ BEGIN
     );
   tm_rst <= reset OR config_reg(16*1+8);
   JB(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
-  JA(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- replica
+  -- JA(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- replica
   JB(7)  <= config_reg(16*3-1);         -- ex_rst
   WITH config_reg(16*6+1 DOWNTO 16*6) SELECT
     adc_refclk <= JB(2) WHEN "01",      -- optocoupler isolated
     JA(7)               WHEN "10",      -- pins on JA
     JD(1)               WHEN "11",      -- pins on JD
     clk_50MHz           WHEN OTHERS;
+
+  -- digital
+  topmetal_iiminus_digital_inst : topmetal_iiminus_digital
+    PORT MAP (
+      CLK         => clk_125MHz,        -- clock to be derived from
+      RESET       => reset,             -- reset    
+      CLK_DIV     => config_reg(16*8+3 DOWNTO 16*8),  -- log2(CLK_DIV_WIDTH), CLK/(2**CLK_DIV)
+      --
+      CLK_D       => JD(0),             -- clock sent to chip's digital part
+      CLK_FB      => JA(3),             -- clock fed back from the chip
+      READY_P     => VHDCI2P(1),
+      READY_N     => VHDCI2N(1),
+      ADDR_P      => tm_addr_p,
+      ADDR_N      => tm_addr_n,
+      TIME_P      => tm_time_p,
+      TIME_N      => tm_time_n,
+      MARKERD_P   => VHDCI2P(19),
+      MARKERD_N   => VHDCI2N(19),
+      --
+      MARKERD_OUT => OPEN,
+      DATA_CLK    => tm_data_clk,
+      DATA_OUT    => tm_data_d
+    );
+  tm_addr_p <= (VHDCI2P(17), VHDCI2P(14), VHDCI2P(15), VHDCI2P(12), VHDCI2P(13), VHDCI2P(10),
+                VHDCI2P(11));
+  tm_addr_n <= (VHDCI2N(17), VHDCI2N(14), VHDCI2N(15), VHDCI2N(12), VHDCI2N(13), VHDCI2N(10),
+                VHDCI2N(11));
+  tm_time_p <= (VHDCI2P(18), VHDCI2P(16), VHDCI2P(8), VHDCI2P(7), VHDCI2P(6),
+                VHDCI2P(5), VHDCI2P(4), VHDCI2P(3), VHDCI2P(2), VHDCI2P(0));
+  tm_time_n <= (VHDCI2N(18), VHDCI2N(16), VHDCI2N(8), VHDCI2N(7), VHDCI2N(6),
+                VHDCI2N(5), VHDCI2N(4), VHDCI2N(3), VHDCI2N(2), VHDCI2N(0));
+
+  -- Data readback
+  fifo36_inst : fifo36x512
+    PORT MAP (
+      RST    => fifo36_trig,
+      WR_CLK => fifo36_wrclk,
+      RD_CLK => control_data_fifo_rdclk,
+      DIN    => fifo36_din,
+      WR_EN  => fifo36_wren,
+      RD_EN  => fifo36_rden,
+      DOUT   => fifo36_dout,
+      FULL   => OPEN,
+      EMPTY  => fifo36_empty
+    );
+  fifo36_din   <= "0000" & tm_data_d;
+  fifo36_wrclk <= tm_data_clk;
+  fifo36_wren  <= '1';
+  fifo36_trig  <= pulse_reg(5);
+  fifo36_valid <= NOT fifo36_empty;
+  --
+  control_data_fifo_q     <= fifo36_dout(31 DOWNTO 0);
+  control_data_fifo_empty <= fifo36_empty;
+  fifo36_rden             <= control_data_fifo_rdreq;
+
 
   PROCESS (adc_refclk, reset)
   BEGIN

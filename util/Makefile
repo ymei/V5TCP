@@ -12,34 +12,38 @@ LIBS           := -lm
 LDFLAGS        :=
 ############################# Library add-ons #################################
 TINYSCHEME_FEATURES := -DUSE_DL=1 -DUSE_MATH=1 -DUSE_ASCII_NAMES=0
-INCLUDE += -I/opt/local/include -I./tinyscheme/trunk
-LIBS    += -L/opt/local/lib -lpthread -lhdf5
+INCLUDE += -I/opt/local/include -I/usr/local/include -I./tinyscheme/trunk
+LIBS    += -L/opt/local/lib -L/usr/local/lib -lpthread -lhdf5
 GSLLIBS  = $(shell gsl-config --libs)
+GLLIBS   =
 ROOTCFLAGS = $(shell root-config --cflags)
 ROOTLIBS   = $(shell root-config --libs)
 ROOTGLIBS  = $(shell root-config --glibs)
 CFLAGS  += -DH5_NO_DEPRECATED_SYMBOLS
 LIBS    += $(GSLLIBS)
 ############################# OS & ARCH specifics #############################
-ifneq ($(if $(filter Linux %BSD,$(OSTYPE)),OK), OK)
+ifneq ($(OSTYPE), Linux)
   ifeq ($(OSTYPE), Darwin)
     CC = gcc
-    SHLIB_CFLAGS   := -dynamiclib
-    SHLIB_EXT      := .dylib
+    GLLIBS       += -framework GLUT -framework OpenGL -framework Cocoa
+    SHLIB_CFLAGS := -dynamiclib
+    SHLIB_EXT    := .dylib
     TINYSCHEME_FEATURES += -DUSE_STRLWR=1 -D__APPLE__=1 -DOSX=1
     ifeq ($(shell sysctl -n hw.optional.x86_64), 1)
-      ARCH           := x86_64
+      ARCH       := x86_64
     endif
+  else ifeq ($(OSTYPE), FreeBSD)
+    CC = clang
+    GLLIBS += -lGL -lGLU -lglut
+  else ifeq ($(OSTYPE), SunOS)
+    CFLAGS := -c -Wall -std=c99 -pedantic
   else
-    ifeq ($(OSTYPE), SunOS)
-      CFLAGS         := -c -Wall -std=c99 -pedantic
-    else
-      # Let's assume this is win32
-      SHLIB_EXT      := .dll
-      TINYSCHEME_FEATURES += -DUSE_STRLWR=0
-    endif
+    # Let's assume this is win32
+    SHLIB_EXT := .dll
+    TINYSCHEME_FEATURES += -DUSE_STRLWR=0
   endif
 else
+  GLLIBS += -lGL -lGLU -lglut
   TINYSCHEME_FEATURES += -DSUN_DL=1
 endif
 
@@ -52,7 +56,7 @@ ifeq ($(ARCH), ppc970)
   CFLAGS += -m64
 endif
 ############################ Define targets ###################################
-EXE_TARGETS = tcpio
+EXE_TARGETS = tcpio TMII-Digital waveview
 DEBUG_EXE_TARGETS = hdf5rawWaveformIo
 # SHLIB_TARGETS = XXX$(SHLIB_EXT)
 
@@ -69,6 +73,10 @@ debug_exe_targets: $(DEBUG_EXE_TARGETS)
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 tcpio: tcpio.c command.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
+TMII-Digital: TMII-Digital.c command.o
+	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
+waveview: waveview.c hdf5rawWaveformIo.o
+	$(CC) $(CFLAGS) $(INCLUDE) -Wno-deprecated-declarations $^ $(LIBS) $(GLLIBS) $(LDFLAGS) -o $@
 hdf5rawWaveformIo.o: hdf5rawWaveformIo.c hdf5rawWaveformIo.h common.h
 hdf5rawWaveformIo: hdf5rawWaveformIo.c hdf5rawWaveformIo.h
 	$(CC) $(CFLAGS) $(INCLUDE) -DHDF5IO_DEBUG_ENABLEMAIN $< $(LIBS) $(LDFLAGS) -o $@

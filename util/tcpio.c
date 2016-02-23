@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 - 2015
+ * Copyright (c) 2013 - 2016
  *
  *     Yuan Mei
  *
@@ -37,17 +37,20 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
+#include <netinet/in.h>
 #include <netdb.h>
 
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 
-#ifdef __linux /* on linux */
+#if defined(__linux) /* on linux */
 #include <pty.h>
 #include <utmp.h>
-#else /* (__APPLE__ & __MACH__) */
-#include <util.h> /* this is for mac or bsd */
+#elif defined(__FreeBSD__)
+#include <libutil.h>
+#elif defined(__APPLE__) && defined(__MACH__)
+#include <util.h>
 #endif
 
 #include <paths.h>
