@@ -40,6 +40,12 @@ ARCHITECTURE behavior OF topmetal_iiminus_analog_tb IS
   -- Component Declaration for the Unit Under Test (UUT)
   
   COMPONENT topmetal_iiminus_analog
+    GENERIC (
+      ROWS          : positive := 2;     -- number of ROWS in the array
+      COLS          : positive := 3;     -- number of COLS in the ARRAY
+      CLK_DIV_WIDTH : positive := 16;
+      CONFIG_WIDTH  : positive := 16
+    );
     PORT(
       CLK           : IN  std_logic;
       RESET         : IN  std_logic;

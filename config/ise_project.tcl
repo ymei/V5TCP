@@ -5,7 +5,7 @@
 # 
 # This file contains several Tcl procedures (procs) that you can use to automate
 # your project by running from xtclsh or the Project Navigator Tcl console.
-# If you load this file (using the Tcl command: source ise_project.tcl), then you can
+# If you load this file (using the Tcl command: source V5TCP.tcl), then you can
 # run any of the procs included here.
 # 
 # This script is generated assuming your project has HDL sources.
@@ -36,7 +36,7 @@
 # 
 
 set myProject "V5TCP"
-set myScript "ise_project.tcl"
+set myScript "V5TCP.tcl"
 
 # 
 # Main (top-level) routines
@@ -238,6 +238,7 @@ proc add_source_files {} {
    xfile add "../ipcore_dir/cs_vio.xco"
    xfile add "../ipcore_dir/fifo16to32.xco"
    xfile add "../ipcore_dir/fifo32to8.xco"
+   xfile add "../ipcore_dir/fifo36l.xco"
    xfile add "../ipcore_dir/fifo36x512.xco"
    xfile add "../ipcore_dir/fifo8to32.xco"
    xfile add "../src/byte2cmd.vhd"
@@ -284,6 +285,7 @@ proc add_source_files {} {
    xfile add "../src/topmetal_simple.vhd"
    xfile add "../src/uartio.vhd"
    xfile add "../test_bench/shiftreg_drive_tb.vhd"
+   xfile add "../test_bench/topmetal_iiminus_analog_tb.vhd"
    xfile add "../test_bench/topmetal_simple_tb.vhd"
    puts ""
    puts "WARNING: project contains IP cores, synthesis will fail if any of the cores require regenerating."

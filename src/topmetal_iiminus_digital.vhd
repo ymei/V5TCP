@@ -148,7 +148,8 @@ BEGIN
       IB => MARKERD_N
     );
   --------------------------------------------->
-  DATA_CLK              <= clk_d_buf;
-  DATA_OUT(16 DOWNTO 0) <= time_d & addr_d;
+  DATA_CLK                              <= clk_d_buf;
+  DATA_OUT(DATA_OUT'length-1 DOWNTO 19) <= (OTHERS => '0');
+  DATA_OUT(18 DOWNTO 0)                 <= marker_d & ready_d & time_d & addr_d;
 
 END Behavioral;

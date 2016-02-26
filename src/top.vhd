@@ -300,7 +300,7 @@ ARCHITECTURE Behavioral OF top IS
   END COMPONENT;
   ---------------------------------------------> Topmetal
   ---------------------------------------------< Data readback
-  COMPONENT fifo36x512
+  COMPONENT fifo36l
     PORT (
       RST    : IN  std_logic;
       WR_CLK : IN  std_logic;
@@ -440,6 +440,7 @@ ARCHITECTURE Behavioral OF top IS
   ---------------------------------------------> UART/RS232
   ---------------------------------------------< Topmetal
   SIGNAL led_cnt                           : unsigned(25 DOWNTO 0);
+  SIGNAL clki_cnt                          : unsigned(3 DOWNTO 0);
   SIGNAL tm_rst                            : std_logic;
   SIGNAL adc_refclk                        : std_logic;
   SIGNAL tm_trig_out                       : std_logic;
@@ -754,7 +755,15 @@ BEGIN
     adc_refclk <= JB(2) WHEN "01",      -- optocoupler isolated
     JA(7)               WHEN "10",      -- pins on JA
     JD(1)               WHEN "11",      -- pins on JD
-    clk_50MHz           WHEN OTHERS;
+    clki_cnt(3)         WHEN OTHERS;    -- 3.125MHz
+  PROCESS (clk_50MHz, reset)            -- producing 50MHz/2**4 = 3.125MHz clock
+  BEGIN
+    IF reset = '1' then
+      clki_cnt <= (OTHERS => '0');
+    ELSIF rising_edge(clk_50MHz) then
+      clki_cnt <= clki_cnt + 1;
+    END IF;
+  END PROCESS;
 
   -- digital
   topmetal_iiminus_digital_inst : topmetal_iiminus_digital
@@ -787,8 +796,12 @@ BEGIN
   tm_time_n <= (VHDCI2N(18), VHDCI2N(16), VHDCI2N(8), VHDCI2N(7), VHDCI2N(6),
                 VHDCI2N(5), VHDCI2N(4), VHDCI2N(3), VHDCI2N(2), VHDCI2N(0));
 
+  -- marker_d for debug
+  JA(0) <= fifo36_din(18);
+  JA(1) <= fifo36_wrclk;
+
   -- Data readback
-  fifo36_inst : fifo36x512
+  fifo36_inst : fifo36l
     PORT MAP (
       RST    => fifo36_trig,
       WR_CLK => fifo36_wrclk,
@@ -809,7 +822,6 @@ BEGIN
   control_data_fifo_q     <= fifo36_dout(31 DOWNTO 0);
   control_data_fifo_empty <= fifo36_empty;
   fifo36_rden             <= control_data_fifo_rdreq;
-
 
   PROCESS (adc_refclk, reset)
   BEGIN
