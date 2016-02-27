@@ -351,7 +351,7 @@ int configure_dac(int sockfd, char *buf)
 #endif
     /* use external DAC to set bias */
     /* write and update output6 : VR8B */
-    val = (0x03<<24) | (0x05 << 20) | (DACVolt(3.078) << 4);
+    val = (0x03<<24) | (0x05 << 20) | (DACVolt(0.824) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -361,7 +361,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output7 : ARST_VREF */
-    val = (0x03<<24) | (0x06 << 20) | (DACVolt(0.840) << 4);
+    val = (0x03<<24) | (0x06 << 20) | (DACVolt(0.818) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -371,7 +371,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output5 : CSA_VREF */
-    val = (0x03<<24) | (0x04 << 20) | (DACVolt(0.700) << 4);
+    val = (0x03<<24) | (0x04 << 20) | (DACVolt(0.618) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -409,7 +409,7 @@ int configure_sram(int sockfd, int row, int val)
     v=0;
     for(i=0; i<nval; i++) {
         aval[i] = 0;
-        if((int)(i/72) == row) {
+        if((int)(i/(72/4)) == row) {
             v = 0x10 | (val & 0x0f);
             aval[i] = v<<24 | v<<16 | v<<8 | v;
         }
@@ -459,7 +459,7 @@ int configure_topmetal(int sockfd, char *buf)
     n = cmd_write_register(&buf32, 2, 0x0004);
     n = query_response(sockfd, buf, n, buf, 0);
     /* load sram data */
-    configure_sram(sockfd, 10, 0x0);
+    configure_sram(sockfd, 33, 0x0);
     /* write sram */
     n = cmd_send_pulse(&buf32, 0x08); /* pulse_reg(3) */
     n = query_response(sockfd, buf, n, buf, 0);
@@ -469,17 +469,22 @@ int configure_topmetal(int sockfd, char *buf)
     // n = cmd_send_pulse(&buf32, 0x01); /* pulse_reg(0) */
     // n = query_response(sockfd, buf, n, buf, 0);
 
+    /* turn off analog clock */
+    n = cmd_write_register(&buf32, 6, 0x0002);
+    n = query_response(sockfd, buf, n, buf, 0);
+ 
     /* digital part */
     /* (bit 3 downto 0) controls digital clock f_CLK/2**(bit 3 downto 0) */
-    n = cmd_write_register(&buf32, 8, 0x0005);
+    n = cmd_write_register(&buf32, 8, 0x0006);
     n = query_response(sockfd, buf, n, buf, 0);
-    
+   
+    Sleep(2); 
     return 1;
 }
 
 int tm_digital_read(int sockfd)
 {
-#define NBASK (8192*4)
+#define NBASK (4096*4)
     char ibuf[NBASK];
     char buf[BUFSIZ];
     uint32_t *ibuf32, *buf32, v;
@@ -529,7 +534,6 @@ int tm_digital_read(int sockfd)
             if(nsel>0) {
                 if(FD_ISSET(sockfd, &rfd)) {
                     n = read(sockfd, ibuf+readTotal, sizeof(ibuf)-readTotal);
-                    // debug_printf("n = %zd\n", n);
                     if(n < 0) {
                         warn("read");
                         break;
@@ -566,7 +570,7 @@ int tm_digital_read(int sockfd)
         /* big endian to little endian */
         v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) | (ibuf32[i]<<8 & 0x00ff0000)
             | ibuf32[i]<<24;
-        printf("0x%08x %d %d 0x%03x 0x%02x\n", v, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
+        printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
     }
 
     return nb;
@@ -647,7 +651,6 @@ int main(int argc, char **argv)
 
     configure_dac(sockfd, buf);
     configure_topmetal(sockfd, buf);
-    Sleep(200);
     tm_digital_read(sockfd);
     
     stopTime = time(NULL);

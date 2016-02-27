@@ -50,7 +50,7 @@ ENTITY topmetal_iiminus_digital IS
     MARKERD_P   : IN  std_logic;
     MARKERD_N   : IN  std_logic;
     --
-    MARKERD_OUT : OUT std_logic;
+    DATA_VALID  : OUT std_logic;
     DATA_CLK    : OUT std_logic;
     DATA_OUT    : OUT std_logic_vector(DATA_OUT_WIDTH-1 DOWNTO 0)
   );
@@ -59,12 +59,14 @@ END topmetal_iiminus_digital;
 ARCHITECTURE Behavioral OF topmetal_iiminus_digital IS
 
   SIGNAL clk_cnt   : unsigned(CLK_DIV_WIDTH-1 DOWNTO 0);
+  SIGNAL col_cnt   : unsigned(12 DOWNTO 0);
   SIGNAL clk_buf   : std_logic;
   SIGNAL clk_d_buf : std_logic;
   SIGNAL addr_d    : std_logic_vector(6 DOWNTO 0);
   SIGNAL time_d    : std_logic_vector(9 DOWNTO 0);
   SIGNAL ready_d   : std_logic;
   SIGNAL marker_d  : std_logic;
+  SIGNAL data_buf  : std_logic_vector(DATA_OUT_WIDTH-1 DOWNTO 0);
   
 BEGIN 
 
@@ -148,8 +150,19 @@ BEGIN
       IB => MARKERD_N
     );
   --------------------------------------------->
+  col_proc: PROCESS (clk_d_buf, RESET)
+  BEGIN
+    IF RESET = '1' THEN
+      col_cnt <= to_unsigned(0, col_cnt'length);
+    ELSIF rising_edge(clk_d_buf) THEN
+      col_cnt               <= col_cnt + 1;
+      data_buf(18 DOWNTO 0) <= marker_d & ready_d & time_d & addr_d;
+    END IF;
+  END PROCESS col_proc;
+
+  DATA_VALID                            <= data_buf(18) OR data_buf(17);
   DATA_CLK                              <= clk_d_buf;
-  DATA_OUT(DATA_OUT'length-1 DOWNTO 19) <= (OTHERS => '0');
-  DATA_OUT(18 DOWNTO 0)                 <= marker_d & ready_d & time_d & addr_d;
+  DATA_OUT(18 DOWNTO 0)                 <= data_buf(18 DOWNTO 0);
+  DATA_OUT(DATA_OUT_WIDTH-1 DOWNTO 19)  <= std_logic_vector(col_cnt);
 
 END Behavioral;

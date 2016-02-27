@@ -35,7 +35,7 @@ USE work.common_pkg.ALL;
 
 ENTITY top IS
   GENERIC (
-    includeChipscope : boolean := true
+    includeChipscope : boolean := false
   );
   PORT (
     clk_xtal      : IN    std_logic;
@@ -273,7 +273,7 @@ ARCHITECTURE Behavioral OF top IS
       MARKERD_P   : IN  std_logic;
       MARKERD_N   : IN  std_logic;
       --
-      MARKERD_OUT : OUT std_logic;
+      DATA_VALID  : OUT std_logic;
       DATA_CLK    : OUT std_logic;
       DATA_OUT    : OUT std_logic_vector(DATA_OUT_WIDTH-1 DOWNTO 0)
     );
@@ -450,6 +450,7 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_addr_n                         : std_logic_vector(6 DOWNTO 0);
   SIGNAL tm_time_p                         : std_logic_vector(9 DOWNTO 0);
   SIGNAL tm_time_n                         : std_logic_vector(9 DOWNTO 0);
+  SIGNAL tm_data_valid                     : std_logic;
   SIGNAL tm_data_clk                       : std_logic;
   SIGNAL tm_data_d                         : std_logic_vector(31 DOWNTO 0);
   ---------------------------------------------> Topmetal
@@ -783,7 +784,7 @@ BEGIN
       MARKERD_P   => VHDCI2P(19),
       MARKERD_N   => VHDCI2N(19),
       --
-      MARKERD_OUT => OPEN,
+      DATA_VALID  => tm_data_valid,
       DATA_CLK    => tm_data_clk,
       DATA_OUT    => tm_data_d
     );
@@ -813,10 +814,10 @@ BEGIN
       FULL   => OPEN,
       EMPTY  => fifo36_empty
     );
+  fifo36_wren  <= tm_data_valid;
   fifo36_din   <= "0000" & tm_data_d;
   fifo36_wrclk <= tm_data_clk;
-  fifo36_wren  <= '1';
-  fifo36_trig  <= pulse_reg(5);
+  fifo36_trig  <= reset OR pulse_reg(5);
   fifo36_valid <= NOT fifo36_empty;
   --
   control_data_fifo_q     <= fifo36_dout(31 DOWNTO 0);
