@@ -65,11 +65,23 @@
 
 #include "common.h"
 #include "command.h"
+#define TM_NCOL 72
+#define TM_NROW 72
+static struct config_parameters
+{
+    int row;
+    int col;
+    int b4dac_val;
+    double b4dac_ib;
+    double col_ib;
+    double vr8b;
+    double arst_vref;
+    double csa_vref;
+    double ains;
+    double addr_grst;
+} config_param;
 
 static time_t startTime, stopTime;
-static unsigned int chMask;
-static size_t nCh;
-static size_t nEvents;
 
 /******************************************************************************/
 #define Sleep(x) (usleep((x)*5000))
@@ -91,7 +103,6 @@ static int connect_retry(int sockfd, const struct sockaddr *addr, socklen_t alen
     }
     return(-1);
 }
-
 static int get_socket(char *host, char *port)
 {
     int status;
@@ -213,70 +224,6 @@ static void signal_kill_handler(int sig)
     exit(EXIT_SUCCESS);
 }
 
-static void *send_and_receive_loop(void *arg)
-{
-    struct timeval tv; /* tv should be re-initialized in the loop since select
-                          may change it after each call */
-    int sockfd, maxfd, nsel;
-    fd_set rfd, wfd;
-    char ibuf[BUFSIZ];
-    size_t iEvent = 0;
-    ssize_t nr, nw, readTotal;
-/*
-    FILE *fp;
-    if((fp=fopen("log.txt", "w"))==NULL) {
-        perror("log.txt");
-        return (void*)NULL;
-    }
-*/
-    sockfd = *((int*)arg);
-
-    readTotal = 0;
-    for(;;) {
-        tv.tv_sec = 10;
-        tv.tv_usec = 0;
-        FD_ZERO(&rfd);
-        FD_SET(sockfd, &rfd);
-        FD_ZERO(&wfd);
-        FD_SET(sockfd, &wfd);
-        maxfd = sockfd;
-        nsel = select(maxfd+1, &rfd, &wfd, NULL, &tv);
-        if(nsel < 0 && errno != EINTR) { /* other errors */
-            warn("select");
-            break;
-        }
-        if(nsel == 0) {
-            warn("timed out");
-        }
-        if(nsel>0) {
-            if(FD_ISSET(sockfd, &rfd)) {
-                nr = read(sockfd, ibuf, sizeof(ibuf));
-                debug_printf("nr = %zd\n", nr);
-                if(nr < 0) {
-                    warn("read");
-                    break;
-                }
-                readTotal += nr;
-//            write(fileno(fp), ibuf, nr);
-            }
-            if(FD_ISSET(sockfd, &wfd)) {
-                strlcpy(ibuf, "CURVENext?\n", sizeof(ibuf));
-                nw = write(sockfd, ibuf, 2459); // strnlen(ibuf, sizeof(ibuf)));
-                debug_printf("nw = %zd\n", nw);
-            }
-        }
-        if(iEvent >= nEvents) {
-            goto end;
-        }
-        iEvent++;
-    }
-end:
-    debug_printf("readTotal = %zd\n", readTotal);
-
-//    fclose(fp);
-    return (void*)NULL;
-}
-
 /******************************************************************************/
 
 int configure_dac(int sockfd, char *buf)
@@ -307,7 +254,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output2 : 4BDAC_IB */
-    val = (0x03<<24) | (0x01 << 20) | (DACVolt(0.684) << 4);
+    val = (0x03<<24) | (0x01 << 20) | (DACVolt(config_param.b4dac_ib) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -317,7 +264,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output3 : COL_IB */
-    val = (0x03<<24) | (0x02 << 20) | (DACVolt(0.9) << 4);
+    val = (0x03<<24) | (0x02 << 20) | (DACVolt(config_param.col_ib) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -327,7 +274,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output4 : Gring */
-    val = (0x03<<24) | (0x03 << 20) | (DACVolt(0.0) << 4);
+    val = (0x03<<24) | (0x03 << 20) | (DACVolt(config_param.addr_grst) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -351,7 +298,7 @@ int configure_dac(int sockfd, char *buf)
 #endif
     /* use external DAC to set bias */
     /* write and update output6 : VR8B */
-    val = (0x03<<24) | (0x05 << 20) | (DACVolt(0.824) << 4);
+    val = (0x03<<24) | (0x05 << 20) | (DACVolt(config_param.vr8b) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -361,7 +308,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output7 : ARST_VREF */
-    val = (0x03<<24) | (0x06 << 20) | (DACVolt(0.818) << 4);
+    val = (0x03<<24) | (0x06 << 20) | (DACVolt(config_param.arst_vref) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -371,7 +318,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output5 : CSA_VREF */
-    val = (0x03<<24) | (0x04 << 20) | (DACVolt(0.618) << 4);
+    val = (0x03<<24) | (0x04 << 20) | (DACVolt(config_param.csa_vref) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -381,7 +328,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output8 : AINS */
-    val = (0x03<<24) | (0x07 << 20) | (DACVolt(0.000) << 4);
+    val = (0x03<<24) | (0x07 << 20) | (DACVolt(config_param.ains) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -389,14 +336,13 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_write_register(&buf32, 7, val & 0xffff);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
 #undef DACVolt
     Sleep(20); /* Wait for shiftreg to finish */
 
     return 1;
 }
 
-int configure_sram(int sockfd, int row, int val)
+int configure_sram(int sockfd, int row, int col, int val)
 {
     uint32_t *buf32=NULL, *aval, v;
     char *buf;
@@ -406,14 +352,15 @@ int configure_sram(int sockfd, int row, int val)
     nval = 1296; /* 72 * 72 / 4 */
     aval = (uint32_t*)calloc(nval, sizeof(uint32_t));
 
-    v=0;
+    v = 0x10 | (val & 0x0f);
     for(i=0; i<nval; i++) {
         aval[i] = 0;
-        if((int)(i/(72/4)) == row) {
-            v = 0x10 | (val & 0x0f);
+        if((int)(i/(TM_NCOL/4)) == row) {
             aval[i] = v<<24 | v<<16 | v<<8 | v;
         }
     }
+    // hack
+    // aval[18*row+(col/4)] = v<<((col%4)*8);
     
     n = cmd_write_memory(&buf32, 0, aval, nval);
     buf = (char*)buf32;
@@ -459,7 +406,7 @@ int configure_topmetal(int sockfd, char *buf)
     n = cmd_write_register(&buf32, 2, 0x0004);
     n = query_response(sockfd, buf, n, buf, 0);
     /* load sram data */
-    configure_sram(sockfd, 33, 0x0);
+    configure_sram(sockfd, config_param.row, config_param.col, config_param.b4dac_val);
     /* write sram */
     n = cmd_send_pulse(&buf32, 0x08); /* pulse_reg(3) */
     n = query_response(sockfd, buf, n, buf, 0);
@@ -469,26 +416,72 @@ int configure_topmetal(int sockfd, char *buf)
     // n = cmd_send_pulse(&buf32, 0x01); /* pulse_reg(0) */
     // n = query_response(sockfd, buf, n, buf, 0);
 
-    /* turn off analog clock */
-    n = cmd_write_register(&buf32, 6, 0x0002);
+    /* stop on a pixel */
+    /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
+
+    n = cmd_write_register(&buf32, 3, 0x8000 | (config_param.row * TM_NCOL + config_param.col));
     n = query_response(sockfd, buf, n, buf, 0);
  
     /* digital part */
     /* (bit 3 downto 0) controls digital clock f_CLK/2**(bit 3 downto 0) */
-    n = cmd_write_register(&buf32, 8, 0x0006);
+    n = cmd_write_register(&buf32, 8, 0x0007);
     n = query_response(sockfd, buf, n, buf, 0);
-   
+
     Sleep(2); 
     return 1;
 }
 
-int tm_digital_read(int sockfd)
+int analyze_data(const char *buf, size_t n, size_t *hits, size_t *nframe)
+{
+    uint32_t *ibuf32, v, cnti, cntd, markerd, readyd, timed, addrd;
+    // size_t nframe=0, hits[TM_NCOL] = {0};
+    ssize_t i, icol;
+
+    ibuf32 = (uint32_t*)buf;
+
+    icol = -1;
+    // nframe = 0;
+    for(i=0; i<n/sizeof(uint32_t); i++) {
+        /* big endian to little endian */
+        v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) |
+            (ibuf32[i]<<8 & 0x00ff0000) | ibuf32[i]<<24;
+        cntd    = v>>19;
+        markerd = (v>>18) & 0x1;
+        readyd  = (v>>17) & 0x01;
+        timed   = (v>>7)  & 0x1ff;
+        addrd    = v      & 0x7f;
+        //printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
+        if(markerd) {
+            icol = 0; cnti = cntd;
+            (*nframe)++;
+        }
+        if(icol < 0) { /* looking for the first markerd */
+            continue;
+        }
+        if(cntd < cnti) { /* counter wrapped around */
+            icol = ((1<<13) | cntd) - cnti;
+        } else {
+            icol = cntd - cnti;
+        }
+        if(icol < 0 || icol >= TM_NCOL) {
+            error_printf("icol = %zd\n", icol);
+            break;
+        }
+        if(readyd)
+            hits[icol]++;
+    }
+    return 1;
+}
+
+int tm_digital_read(int sockfd, size_t nframemax, FILE *fp)
 {
 #define NBASK (4096*4)
     char ibuf[NBASK];
     char buf[BUFSIZ];
     uint32_t *ibuf32, *buf32, v;
     size_t nb, ncmd;
+    /* for analysis */
+    size_t nframe=0, hits[TM_NCOL] = {0};
     ssize_t n, iCh, iP, i, j;
     /**/
     struct timeval tv; /* tv should be re-initialized in the loop since select()
@@ -500,83 +493,88 @@ int tm_digital_read(int sockfd)
     buf32 = (uint32_t*)buf;
     ibuf32 = (uint32_t*)ibuf;
 
-    /* reset fifo36: fifo36_trig */
-    n = cmd_send_pulse(&buf32, 0x20); /* pulse_reg(5) */
-    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
-    Sleep(200);
+    while(nframe < nframemax) {
+        /* reset fifo36: fifo36_trig */
+        n = cmd_send_pulse(&buf32, 0x20); /* pulse_reg(5) */
+        n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
+        Sleep(200);
+        /* read data fifo back */
+        ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(uint32_t));
+        
+        nb = 0;
+        while(nb < NBASK) {
+            n = query_response(sockfd, buf, ncmd, NULL, 0);
 
-    /* read data fifo back */
-    ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(uint32_t));
-
-    nb = 0;
-    while(nb < NBASK) {
-        n = query_response(sockfd, buf, ncmd, NULL, 0);
-
-        readTotal = 0;
-        for(;;) {
-            tv.tv_sec  = 9;
-            tv.tv_usec = 500 * 1000;
-            FD_ZERO(&rfd);
-            FD_SET(sockfd, &rfd);
-            maxfd = sockfd;
-            nsel = select(maxfd+1, &rfd, NULL, NULL, &tv);
-            if(nsel < 0 && errno != EINTR) { /* other errors */
-                warn("select");
-                break;
-            }
-            if(nsel == 0) {
-                error_printf("select timed out!  nb = %zd, readTotal = %zd\n\n", nb, readTotal);
-                // close(sockfd);
-                // signal_kill_handler(0);
-                readTotal = NBASK;
-                break;
-            }
-            if(nsel>0) {
-                if(FD_ISSET(sockfd, &rfd)) {
-                    n = read(sockfd, ibuf+readTotal, sizeof(ibuf)-readTotal);
-                    if(n < 0) {
-                        warn("read");
-                        break;
-                    } else if(n == 0) {
-                        warn("read: socket closed");
-                        break;
+            readTotal = 0;
+            for(;;) {
+                tv.tv_sec  = 9;
+                tv.tv_usec = 100 * 1000;
+                FD_ZERO(&rfd);
+                FD_SET(sockfd, &rfd);
+                maxfd = sockfd;
+                nsel = select(maxfd+1, &rfd, NULL, NULL, &tv);
+                if(nsel < 0 && errno != EINTR) { /* other errors */
+                    warn("select");
+                    break;
+                }
+                if(nsel == 0) {
+                    error_printf("select timed out!  nb = %zd, readTotal = %zd\n\n", nb, readTotal);
+                    // close(sockfd);
+                    // signal_kill_handler(0);
+                    readTotal = NBASK;
+                    break;
+                }
+                if(nsel>0) {
+                    if(FD_ISSET(sockfd, &rfd)) {
+                        n = read(sockfd, ibuf+readTotal, sizeof(ibuf)-readTotal);
+                        if(n < 0) {
+                            warn("read");
+                            break;
+                        } else if(n == 0) {
+                            warn("read: socket closed");
+                            break;
+                        }
+                        readTotal += n;
                     }
-                    readTotal += n;
+                }
+                if(readTotal >= NBASK) {
+                    if(readTotal > NBASK) {
+                        error_printf("(readTotal = %zd) > (NBASK = %d)\n", readTotal, NBASK);
+                    }
+                    break;
                 }
             }
-            if(readTotal >= NBASK) {
-                if(readTotal > NBASK) {
-                    error_printf("(readTotal = %zd) > (NBASK = %d)\n", readTotal, NBASK);
-                }
-                break;
-            }
-        }
-        nb += readTotal;
+            nb += readTotal;
 
-        /* test data continuity from a counter */ /*
-        for(i=0; i<readTotal/sizeof(uint16_t); i+=8) {
-            t2 = 0;
-            for(k=4; k<8; k++) {
-                t3 = buf16[i+k];
-                t2 |= (((t3>>8) & 0x00ffL) | ((t3<<8) & 0x00ff00L)) << ((7-k)*16);
-            }
-            if(t2 - t1 != 1) printf("t1 = 0x%016lx, t2 = 0x%016lx\n", t1, t2);
-            t1 = t2;
+            /* test data continuity from a counter */ /*
+               for(i=0; i<readTotal/sizeof(uint16_t); i+=8) {
+               t2 = 0;
+               for(k=4; k<8; k++) {
+               t3 = buf16[i+k];
+               t2 |= (((t3>>8) & 0x00ffL) | ((t3<<8) & 0x00ff00L)) << ((7-k)*16);
+               }
+               if(t2 - t1 != 1)jprintf("t1 = 0x%016lx, t2 = 0x%016lx\n", t1, t2);
+               t1 = t2;
+               }
+                                                      */
         }
-                                                  */
+
+        for(i=0; i<nb/sizeof(uint32_t); i++) {
+            /* big endian to little endian */
+            v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) | (ibuf32[i]<<8 & 0x00ff0000)
+                | ibuf32[i]<<24;
+            printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
+        }
+        analyze_data(ibuf, nb, hits, &nframe);
     }
 
-    for(i=0; i<nb/sizeof(uint32_t); i++) {
-        /* big endian to little endian */
-        v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) | (ibuf32[i]<<8 & 0x00ff0000)
-            | ibuf32[i]<<24;
-        printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
+    for(i=0; i<TM_NCOL; i++) {
+        fprintf(fp, "%-2zd %zd %zd\n", i, hits[i], nframe);
     }
-
-    return nb;
+    
+    return nframe;
 #undef NBASK
 }
-
 
 /******************************************************************************/
 
@@ -589,33 +587,48 @@ int main(int argc, char **argv)
     int sockfd;
     pthread_t wTid;
     ssize_t i;
-    size_t n, nWfmPerChunk = 100;
+    size_t nframemax;
+    FILE *fp;
 
-    if(argc<6) {
-        error_printf("%s scopeAdddress scopePort outFileName chMask(0x..) nEvents nWfmPerChunk\n",
+    config_param.row = 0;
+    config_param.col = 0;
+    config_param.b4dac_val = 0x0;
+    config_param.b4dac_ib = 0.695;
+    config_param.col_ib = 0.987;
+    config_param.vr8b = 0.630;
+    config_param.arst_vref = 0.818;
+    config_param.csa_vref = 0.618;
+    config_param.ains = 0.0;
+    config_param.addr_grst = 0.0;
+
+    if(argc<5 || (argc>5 && argc<15)) {
+        error_printf("%s scopeAdddress scopePort outFileName nframemax\n"
+                     "[row col 4bdac_val 4bdac_ib col_ib vr8b arst_vref csa_vref ains addr_grst]\n",
                      argv[0]);
         return EXIT_FAILURE;
     }
     scopeAddress = argv[1];
     scopePort = argv[2];
     outFileName = argv[3];
-    nEvents = atol(argv[5]);
+    nframemax = atol(argv[4]);
 
-    errno = 0;
-    chMask = strtol(argv[4], &p, 16);
-    v = chMask;
-    for(c=0; v; c++) v &= v - 1; /* Brian Kernighan's way of counting bits */
-    nCh = c;
-    if(errno != 0 || *p != 0 || p == argv[4] || chMask <= 0 || nCh>SCOPE_NCH) {
-        error_printf("Invalid chMask input: %s\n", argv[4]);
+    if(argc>5) {
+        config_param.row       = strtol(argv[5], &p, 10);
+        config_param.col       = strtol(argv[6], &p, 10);
+        config_param.b4dac_val = strtol(argv[7], &p, 16);
+        config_param.b4dac_ib  = strtod(argv[8], &p);
+        config_param.col_ib    = strtod(argv[9], &p);
+        config_param.vr8b      = strtod(argv[10], &p);
+        config_param.arst_vref = strtod(argv[11], &p);
+        config_param.csa_vref  = strtod(argv[12], &p);
+        config_param.ains      = strtod(argv[13], &p);
+        config_param.addr_grst = strtod(argv[14], &p);
+    }
+    if(errno) {
+        error_printf("Value interpretation error.\n");
         return EXIT_FAILURE;
     }
-    if(argc>=7)
-        nWfmPerChunk = atol(argv[6]);
-
-    debug_printf("outFileName: %s, chMask: 0x%02x, nCh: %zd, nEvents: %zd, nWfmPerChunk: %zd\n",
-                 outFileName, chMask, nCh, nEvents, nWfmPerChunk);
-
+    
     sockfd = get_socket(scopeAddress, scopePort);
     if(sockfd < 0) {
         error_printf("Failed to establish a socket.\n");
@@ -625,41 +638,32 @@ int main(int argc, char **argv)
     signal(SIGKILL, signal_kill_handler);
     signal(SIGINT, signal_kill_handler);
 
+
+    if((fp = fopen(outFileName, "w")) == NULL) {
+        perror(outFileName);
+        return EXIT_FAILURE;
+    }
+    
 //    pthread_create(&wTid, NULL, pop_and_save, &sockfd);
 
-    printf("start time = %zd\n", startTime = time(NULL));
+    fprintf(stderr, "start time = %zd\n", startTime = time(NULL));
 
 //    send_and_receive_loop(&sockfd);
 
     buf32 = (uint32_t*)buf;
 
-    /* dac value, for usage demo, not in effect */
-    // n = cmd_write_register(&buf32, 0, 40632); // 3.1V
-    n = cmd_write_register(&buf32, 0, 32768); // 2.5V
-    // n = cmd_read_register(&buf32, 3);
-    printf("sent: ");
-    for(i=0; i<n; i++) {
-        printf("%02x ", (unsigned char)buf[i]);
-    }
-    printf("\n");
-    n = query_response(sockfd, buf, n, buf, 0);
-    printf("received: ");
-    for(i=0; i<n; i++) {
-        printf("%02x ", (unsigned char)buf[i]);
-    }
-    printf("\n");
-
     configure_dac(sockfd, buf);
     configure_topmetal(sockfd, buf);
-    tm_digital_read(sockfd);
+    tm_digital_read(sockfd, nframemax, fp);
     
     stopTime = time(NULL);
 //    pthread_join(wTid, NULL);
 
-    printf("\nstart time = %zd\n", startTime);
-    printf("stop time  = %zd\n", stopTime);
+    fprintf(stderr, "\nstart time = %zd\n", startTime);
+    fprintf(stderr, "stop time  = %zd\n", stopTime);
 
     close(sockfd);
+    fclose(fp);
     atexit_flush_files();
     return EXIT_SUCCESS;
 }

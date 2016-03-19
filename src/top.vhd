@@ -781,21 +781,21 @@ BEGIN
       ADDR_N      => tm_addr_n,
       TIME_P      => tm_time_p,
       TIME_N      => tm_time_n,
-      MARKERD_P   => VHDCI2P(19),
-      MARKERD_N   => VHDCI2N(19),
+      MARKERD_P   => VHDCI2P(0),
+      MARKERD_N   => VHDCI2N(0),
       --
       DATA_VALID  => tm_data_valid,
       DATA_CLK    => tm_data_clk,
       DATA_OUT    => tm_data_d
     );
-  tm_addr_p <= (VHDCI2P(17), VHDCI2P(14), VHDCI2P(15), VHDCI2P(12), VHDCI2P(13), VHDCI2P(10),
-                VHDCI2P(11));
-  tm_addr_n <= (VHDCI2N(17), VHDCI2N(14), VHDCI2N(15), VHDCI2N(12), VHDCI2N(13), VHDCI2N(10),
-                VHDCI2N(11));
-  tm_time_p <= (VHDCI2P(18), VHDCI2P(16), VHDCI2P(8), VHDCI2P(7), VHDCI2P(6),
-                VHDCI2P(5), VHDCI2P(4), VHDCI2P(3), VHDCI2P(2), VHDCI2P(0));
-  tm_time_n <= (VHDCI2N(18), VHDCI2N(16), VHDCI2N(8), VHDCI2N(7), VHDCI2N(6),
-                VHDCI2N(5), VHDCI2N(4), VHDCI2N(3), VHDCI2N(2), VHDCI2N(0));
+  tm_addr_p <= (VHDCI2P(2), VHDCI2P(3), VHDCI2P(4), VHDCI2P(5), VHDCI2P(6), VHDCI2P(7),
+                VHDCI2P(8));
+  tm_addr_n <= (VHDCI2N(2), VHDCI2N(3), VHDCI2N(4), VHDCI2N(5), VHDCI2N(6), VHDCI2N(7),
+                VHDCI2N(8));
+  tm_time_p <= (VHDCI2P(10), VHDCI2P(11), VHDCI2P(12), VHDCI2P(13), VHDCI2P(14),
+                VHDCI2P(15), VHDCI2P(16), VHDCI2P(17), VHDCI2P(18), VHDCI2P(19));
+  tm_time_n <= (VHDCI2N(10), VHDCI2N(11), VHDCI2N(12), VHDCI2N(13), VHDCI2N(14),
+                VHDCI2N(15), VHDCI2N(16), VHDCI2N(17), VHDCI2N(18), VHDCI2N(19));
 
   -- marker_d for debug
   JA(0) <= fifo36_din(18);
