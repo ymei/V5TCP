@@ -24,7 +24,7 @@ LIBS    += $(GSLLIBS)
 ############################# OS & ARCH specifics #############################
 ifneq ($(OSTYPE), Linux)
   ifeq ($(OSTYPE), Darwin)
-    CC = gcc
+    CC = clang
     GLLIBS       += -framework GLUT -framework OpenGL -framework Cocoa
     SHLIB_CFLAGS := -dynamiclib
     SHLIB_EXT    := .dylib

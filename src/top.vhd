@@ -811,7 +811,7 @@ BEGIN
       WR_EN  => fifo36_wren,
       RD_EN  => fifo36_rden,
       DOUT   => fifo36_dout,
-      FULL   => OPEN,
+      FULL   => status_reg(0),
       EMPTY  => fifo36_empty
     );
   fifo36_wren  <= tm_data_valid;

@@ -479,6 +479,7 @@ int tm_digital_read(int sockfd, size_t nframemax, FILE *fp)
     char ibuf[NBASK];
     char buf[BUFSIZ];
     uint32_t *ibuf32, *buf32, v;
+    uint16_t status;
     size_t nb, ncmd;
     /* for analysis */
     size_t nframe=0, hits[TM_NCOL] = {0};
@@ -493,11 +494,20 @@ int tm_digital_read(int sockfd, size_t nframemax, FILE *fp)
     buf32 = (uint32_t*)buf;
     ibuf32 = (uint32_t*)ibuf;
 
+
     while(nframe < nframemax) {
-        /* reset fifo36: fifo36_trig */
+        /* Reset every time in the loop to ensure contiguous data, as required by analyze_data() */
+        /* reset fifo36: fifo36_trig. */
         n = cmd_send_pulse(&buf32, 0x20); /* pulse_reg(5) */
         n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
-        Sleep(200);
+        /* check if the fifo is full */
+        do {
+            Sleep(20);
+            n = cmd_read_status(&buf32, 0);
+            n = query_response(sockfd, buf, n, buf, 4);
+            status = ((uint16_t)buf[2]<<8) | (uint16_t)buf[3];
+        } while ((status & 0x0001) == 0);
+        
         /* read data fifo back */
         ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(uint32_t));
         
@@ -563,7 +573,7 @@ int tm_digital_read(int sockfd, size_t nframemax, FILE *fp)
             /* big endian to little endian */
             v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) | (ibuf32[i]<<8 & 0x00ff0000)
                 | ibuf32[i]<<24;
-            printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
+            // printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
         }
         analyze_data(ibuf, nb, hits, &nframe);
     }
