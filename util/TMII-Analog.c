@@ -26,7 +26,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * TMII-Digital host port ...
+ * TMII-Analog host port ...
+ * For setting analog operation conditions for Topmetal-II-
  */
 
 /* waitpid on linux */
@@ -62,26 +63,173 @@
 #include <termios.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <getopt.h>
 
 #include "common.h"
 #include "command.h"
+
 #define TM_NCOL 72
 #define TM_NROW 72
-static struct config_parameters
+struct config_parameters
 {
-    int row;
-    int col;
-    char* b4dac_val;
+    char *scopeAddress;
+    char *scopePort;
+    int stop_row;
+    int stop_col;
+    uint16_t clk_src;
+    uint16_t clk_div;
     double b4dac_ib;
     double col_ib;
     double vr8b;
     double arst_vref;
     double csa_vref;
     double ains;
-    double addr_grst;
-} config_param;
-
+    double gring;
+};
+struct config_parameters config_param,
+    config_param_defaults={"192.168.2.3", "1024", -1, -1, 0x0000, 0x0001, 0.684, 0.9, 3.078, 0.8, 0.6, 0.0, 0.0};
 static time_t startTime, stopTime;
+
+static int parse_opts(int argc, char* const *argv)
+{
+    char *p, *pname;
+    ssize_t i;
+    int ch;
+    double val;
+    long ival;
+    
+    /* options descriptor */
+    static struct option longopts[] = {
+        { "b4dac_ib",  required_argument, NULL, 'd' },
+        { "col_ib",    required_argument, NULL, 'c' },
+        { "vr8b",      required_argument, NULL, 'e' },
+        { "arst_vref", required_argument, NULL, 'r' },
+        { "csa_vref",  required_argument, NULL, 'b' },
+        { "ains",      required_argument, NULL, 'i' },
+        { "gring",     required_argument, NULL, 'g' },
+        { "stop_row",  required_argument, NULL, 'y' },
+        { "stop_col",  required_argument, NULL, 'x' },
+        { "clk_src",   required_argument, NULL, 's' },
+        { "clk_div",   required_argument, NULL, 'v' },        
+        { NULL, 0, NULL, 0 }
+    };
+    memcpy(&config_param, &config_param_defaults, sizeof(config_param));
+    pname = argv[0];
+    while((ch = getopt_long(argc, argv, "d:c:e:r:b:i:g:y:x:s:v:", longopts, NULL)) != -1) {
+        switch(ch) {
+        case 'd':
+            val = strtod(optarg, &p);
+            if(p == optarg) {
+                error_printf("Double float conversion error.\n");
+            } else {
+                config_param.b4dac_ib = val;
+            }
+            break;
+        case 'c':
+            val = strtod(optarg, &p);
+            if(p == optarg) {
+                error_printf("Double float conversion error.\n");
+            } else {
+                config_param.col_ib = val;
+            }
+            break;
+        case 'e':
+            val = strtod(optarg, &p);
+            if(p == optarg) {
+                error_printf("Double float conversion error.\n");
+            } else {
+                config_param.vr8b = val;
+            }
+            break;
+        case 'r':
+            val = strtod(optarg, &p);
+            if(p == optarg) {
+                error_printf("Double float conversion error.\n");
+            } else {
+                config_param.arst_vref = val;
+            }
+            break;
+        case 'b':
+            val = strtod(optarg, &p);
+            if(p == optarg) {
+                error_printf("Double float conversion error.\n");
+            } else {
+                config_param.csa_vref = val;
+            }
+            break;
+        case 'i':
+            val = strtod(optarg, &p);
+            if(p == optarg) {
+                error_printf("Double float conversion error.\n");
+            } else {
+                config_param.ains = val;
+            }
+            break;
+        case 'g':
+            val = strtod(optarg, &p);
+            if(p == optarg) {
+                error_printf("Double float conversion error.\n");
+            } else {
+                config_param.gring = val;
+            }
+            break;
+        case 'y':
+            ival = strtol(optarg, &p, 10);
+            if(p == optarg) {
+                error_printf("Integer conversion error.\n");
+            } else {
+                config_param.stop_row = ival;
+            }
+            break;
+        case 'x':
+            ival = strtol(optarg, &p, 10);
+            if(p == optarg) {
+                error_printf("Integer conversion error.\n");
+            } else {
+                config_param.stop_col = ival;
+            }
+            break;
+        case 's':
+            ival = strtol(optarg, &p, 16);
+            if(p == optarg) {
+                error_printf("Integer conversion error.\n");
+            } else {
+                config_param.clk_src = ival;
+            }
+            break;
+        case 'v':
+            ival = strtol(optarg, &p, 16);
+            if(p == optarg) {
+                error_printf("Integer conversion error.\n");
+            } else {
+                config_param.clk_div = ival;
+            }
+            break;
+        case '?':
+        case 'h':
+        default:
+            goto usage;
+        }
+    }
+    argc -= optind;
+    argv += optind;
+    if(argc < 2) {
+    usage:
+        error_printf("%s [\n", pname);
+        i = 0;
+        while(longopts[i].name) {
+            error_printf("    --%-20s or -%c\n", longopts[i].name, longopts[i].val);
+            i++;
+        }
+        error_printf("] ip port\n");
+        return 0;
+    }
+
+    config_param.scopeAddress = argv[0];
+    config_param.scopePort = argv[1];
+    
+    return argc;
+}
 
 /******************************************************************************/
 #define Sleep(x) (usleep((x)*5000))
@@ -103,6 +251,7 @@ static int connect_retry(int sockfd, const struct sockaddr *addr, socklen_t alen
     }
     return(-1);
 }
+
 static int get_socket(char *host, char *port)
 {
     int status;
@@ -224,15 +373,13 @@ static void signal_kill_handler(int sig)
     exit(EXIT_SUCCESS);
 }
 
-/******************************************************************************/
-
 int configure_dac(int sockfd, char *buf)
 {
     uint32_t *buf32, val;
     size_t n;
     buf32 = (uint32_t*)buf;
 
-    /* DAC8568 for TopmetalII- */    
+    /* DAC8568 for TopmetalII- */
     /* turn on internal vref = 2.5V, so the output is val/65536.0 * 5.0 [V] */
 #define DACVolt(x) ((uint16_t)((double)(x)/5.0 * 65536.0))
     n = cmd_write_register(&buf32, 7, 0x0800);
@@ -274,7 +421,7 @@ int configure_dac(int sockfd, char *buf)
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
     /* write and update output4 : Gring */
-    val = (0x03<<24) | (0x03 << 20) | (DACVolt(config_param.addr_grst) << 4);
+    val = (0x03<<24) | (0x03 << 20) | (DACVolt(config_param.gring) << 4);
     n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -343,78 +490,14 @@ int configure_dac(int sockfd, char *buf)
     return 1;
 }
 
-int configure_sram(int sockfd, int row, int col, char* fname)
-{
-    uint32_t *buf32=NULL, *aval, v1, v2, v3, v4;
-    char *buf;
-    size_t n, nval;
-    ssize_t i;
-
-    FILE *fp;
-    int ret;
-
-    nval = TM_NROW * TM_NCOL / sizeof(uint32_t); /* 72 * 72 / 4 */ 
-    aval = (uint32_t*)calloc(nval, sizeof(uint32_t));
-/*
-    v = 0x10 | (val & 0x0f);
-    for(i=0; i<nval; i++) {
-        aval[i] = 0;
-        if((int)(i/(TM_NCOL/4)) == row) {
-            aval[i] = v<<24 | v<<16 | v<<8 | v;
-        }
-    }
-    // hack
-    aval[18*row+(col/4)] = v<<((col%4)*8);
-*/
-
-    if((fp=fopen(fname,"r"))==NULL) {
-        fprintf(stderr, "Cannot open config file %s\n", fname);
-        exit(EXIT_FAILURE);
-    }
-
-    for(i=0; i<nval; i++) {
-        ret = 0;
-        ret += fscanf(fp, "%x\n", &v1);
-        ret += fscanf(fp, "%x\n", &v2);
-        ret += fscanf(fp, "%x\n", &v3);
-        ret += fscanf(fp, "%x\n", &v4);
-        if(ret != 4) {
-            fprintf(stderr, "File %s ended prematurely.\n", fname);
-            break;
-        }
-
-        aval[i] = v4<<24 | v3<<16 | v2<<8 | v1;
-        /*
-        if((int)(i/(TM_NCOL/4)) == row) {
-            aval[i] = v4<<24 | v3<<16 | v2<<8 | v1;
-        }
-        else{
-        
-            aval[i] = (0x0f&v4)<<24 | (0x0f&v3)<<16 | (0x0f&v2)<<8 | (0x0f&v1);
-        }
-        */
-    }
-
-    fclose(fp);
-    
-    n = cmd_write_memory(&buf32, 0, aval, nval);
-    buf = (char*)buf32;
-    n = query_response(sockfd, buf, n, buf, 0);
-    
-    free(aval);
-    free(buf32);
-    
-    return 1;
-}
-
 int configure_topmetal(int sockfd, char *buf)
 {
-    uint32_t *buf32, val;
+    uint32_t *buf32;
     size_t n;
 
     buf32 = (uint32_t*)buf;
     /* select clock source */
-    n = cmd_write_register(&buf32, 6, 0x0000);
+    n = cmd_write_register(&buf32, 6, config_param.clk_src);
     n = query_response(sockfd, buf, n, buf, 0);
     /* trigger rate control, 1 trigger every val frames */
     n = cmd_write_register(&buf32, 5, 0x0001);
@@ -424,7 +507,7 @@ int configure_topmetal(int sockfd, char *buf)
     n = query_response(sockfd, buf, n, buf, 0);
     /* (bit 3 downto 0) controls TM_CLK = f_CLK/2**(bit 3 downto 0) */
     /* bit 15 sets the output of EX_RST, bit 14 vetos trigger_out */
-    n = cmd_write_register(&buf32, 2, 0x4004);
+    n = cmd_write_register(&buf32, 2, 0x4000 | config_param.clk_div);
     n = query_response(sockfd, buf, n, buf, 0);
     /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
     n = cmd_write_register(&buf32, 3, 0x0a20);
@@ -438,10 +521,8 @@ int configure_topmetal(int sockfd, char *buf)
 
     /* allow trigger output since the first trigger out will happen
      * right after sram write.  Pay attention to TM_CLK rate here as well. */
-    n = cmd_write_register(&buf32, 2, 0x0004);
+    n = cmd_write_register(&buf32, 2, config_param.clk_div);
     n = query_response(sockfd, buf, n, buf, 0);
-    /* load sram data */
-    configure_sram(sockfd, config_param.row, config_param.col, config_param.b4dac_val);
     /* write sram */
     n = cmd_send_pulse(&buf32, 0x08); /* pulse_reg(3) */
     n = query_response(sockfd, buf, n, buf, 0);
@@ -453,230 +534,42 @@ int configure_topmetal(int sockfd, char *buf)
 
     /* stop on a pixel */
     /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
+    if(config_param.stop_row >= 0 && config_param.stop_col >= 0) {
+        n = cmd_write_register(&buf32, 3, 0x8000 | (config_param.stop_row * TM_NCOL + config_param.stop_col));
+        n = query_response(sockfd, buf, n, buf, 0);
+    }
 
-    n = cmd_write_register(&buf32, 3, 0x8000 | (config_param.row * TM_NCOL + config_param.col));
-    n = query_response(sockfd, buf, n, buf, 0);
- 
-    /* digital part */
-    /* (bit 3 downto 0) controls digital clock f_CLK/2**(bit 3 downto 0) */
-    n = cmd_write_register(&buf32, 8, 0x0007);
-    n = query_response(sockfd, buf, n, buf, 0);
-
-    Sleep(2); 
     return 1;
 }
 
-int analyze_data(const char *buf, size_t n, size_t *hits, size_t *nframe)
-{
-    uint32_t *ibuf32, v, cnti, cntd, markerd, readyd, timed, addrd;
-    // size_t nframe=0, hits[TM_NCOL] = {0};
-    ssize_t i, icol;
-
-    ibuf32 = (uint32_t*)buf;
-
-    icol = -1;
-    // nframe = 0;
-    for(i=0; i<n/sizeof(uint32_t); i++) {
-        /* big endian to little endian */
-        v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) |
-            (ibuf32[i]<<8 & 0x00ff0000) | ibuf32[i]<<24;
-        cntd    = v>>19;
-        markerd = (v>>18) & 0x1;
-        readyd  = (v>>17) & 0x01;
-        timed   = (v>>7)  & 0x1ff;
-        addrd    = v      & 0x7f;
-        //printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
-        if(markerd) {
-            icol = 0; cnti = cntd;
-            (*nframe)++;
-        }
-        if(icol < 0) { /* looking for the first markerd */
-            continue;
-        }
-        if(cntd < cnti) { /* counter wrapped around */
-            icol = ((1<<13) | cntd) - cnti;
-        } else {
-            icol = cntd - cnti;
-        }
-        if(icol < 0 || icol >= TM_NCOL) {
-            error_printf("icol = %zd\n", icol);
-            break;
-        }
-        if(readyd)
-            hits[icol]++;
-    }
-    return 1;
-}
-
-int tm_digital_read(int sockfd, size_t nframemax, FILE *fp)
-{
-#define NBASK (4096*4)
-    char ibuf[NBASK];
-    char buf[BUFSIZ];
-    uint32_t *ibuf32, *buf32, v;
-    uint16_t status;
-    size_t nb, ncmd;
-    /* for analysis */
-    size_t nframe=0, hits[TM_NCOL] = {0};
-    ssize_t n, iCh, iP, i, j;
-    /**/
-    struct timeval tv; /* tv should be re-initialized in the loop since select()
-                          may change it after each call */
-    int maxfd, nsel;
-    fd_set rfd;
-    ssize_t readTotal;
-
-    buf32 = (uint32_t*)buf;
-    ibuf32 = (uint32_t*)ibuf;
-
-    /* reset fifo36: fifo36_trig. */
-    n = cmd_send_pulse(&buf32, 0x20); /* pulse_reg(5) */
-    n = query_response(sockfd, buf, n, buf, 0); Sleep(2);
-    while(nframe < nframemax) {
-        /* check if the fifo is full */
-        /*
-        do {
-            Sleep(20);
-            n = cmd_read_status(&buf32, 0);
-            n = query_response(sockfd, buf, n, buf, 4);
-            status = ((uint16_t)buf[2]<<8) | (uint16_t)buf[3];
-        } while ((status & 0x0001) == 0);
-        */
-
-        nb = 0;
-        while(nb < NBASK) {
-            /* read data fifo back */
-            ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(uint32_t));
-            n = query_response(sockfd, buf, ncmd, NULL, 0);
-
-            readTotal = 0;
-            for(;;) {
-                tv.tv_sec  = 0;
-                tv.tv_usec = 1 * 1000;
-                FD_ZERO(&rfd);
-                FD_SET(sockfd, &rfd);
-                maxfd = sockfd;
-                nsel = select(maxfd+1, &rfd, NULL, NULL, &tv);
-                if(nsel < 0 && errno != EINTR) { /* other errors */
-                    warn("select");
-                    break;
-                }
-                if(nsel == 0) {
-                    // error_printf("select timed out!  nb = %zd, readTotal = %zd\n\n", nb, readTotal);
-                    // close(sockfd);
-                    // signal_kill_handler(0);
-                    // readTotal = NBASK;
-                    break;
-                }
-                if(nsel>0) {
-                    if(FD_ISSET(sockfd, &rfd)) {
-                        n = read(sockfd, ibuf+nb+readTotal, sizeof(ibuf)-nb-readTotal);
-                        if(n < 0) {
-                            warn("read");
-                            break;
-                        } else if(n == 0) {
-                            // warn("read: socket closed");
-                            // error_printf("read returned 0.  nb = %zd, readTotal = %zd\n\n", nb, readTotal);
-                            break;
-                        }
-                        readTotal += n;
-                    }
-                }
-                if(readTotal >= NBASK) {
-                    if(readTotal > NBASK) {
-                        error_printf("(readTotal = %zd) > (NBASK = %d)\n", readTotal, NBASK);
-                    }
-                    break;
-                }
-            }
-            nb += readTotal;
-
-            /* test data continuity from a counter */ /*
-               for(i=0; i<readTotal/sizeof(uint16_t); i+=8) {
-               t2 = 0;
-               for(k=4; k<8; k++) {
-               t3 = buf16[i+k];
-               t2 |= (((t3>>8) & 0x00ffL) | ((t3<<8) & 0x00ff00L)) << ((7-k)*16);
-               }
-               if(t2 - t1 != 1)jprintf("t1 = 0x%016lx, t2 = 0x%016lx\n", t1, t2);
-               t1 = t2;
-               }
-                                                      */
-        }
-
-        for(i=0; i<nb/sizeof(uint32_t); i++) {
-            /* big endian to little endian */
-            v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) | (ibuf32[i]<<8 & 0x00ff0000)
-                | ibuf32[i]<<24;
-            fprintf(fp, "0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
-        }
-        // analyze_data(ibuf, nb, hits, &nframe);
-        nframe++;
-    }
-/*
-    for(i=0; i<TM_NCOL; i++) {
-        fprintf(fp, "%-2zd %zd %zd\n", i, hits[i], nframe);
-    }
-*/   
-    return nframe;
-#undef NBASK
-}
-
-/******************************************************************************/
 
 int main(int argc, char **argv)
 {
     char buf[BUFSIZ];
-    uint32_t *buf32, val;
-    char *p, *outFileName, *scopeAddress, *scopePort;
-    unsigned int v, c;
+    uint32_t *buf32;
     int sockfd;
-    pthread_t wTid;
-    ssize_t i;
-    size_t nframemax;
-    FILE *fp;
+    // pthread_t wTid;
 
-    config_param.row = 0;
-    config_param.col = 0;
-    config_param.b4dac_val = "b4dac_config.dat";
-    config_param.b4dac_ib = 0.695;
-    config_param.col_ib = 0.987;
-    config_param.vr8b = 0.630;
-    config_param.arst_vref = 0.818;
-    config_param.csa_vref = 0.618;
-    config_param.ains = 0.0;
-    config_param.addr_grst = 0.0;
-
-    if(argc<5 || (argc>5 && argc<15)) {
-        error_printf("%s scopeAdddress scopePort outFileName nframemax\n"
-                     "[row col 4bdac_val 4bdac_ib col_ib vr8b arst_vref csa_vref ains addr_grst]\n",
-                     argv[0]);
+    if(parse_opts(argc, argv)==0) {
         return EXIT_FAILURE;
     }
-    scopeAddress = argv[1];
-    scopePort = argv[2];
-    outFileName = argv[3];
-    nframemax = atol(argv[4]);
 
-    if(argc>5) {
-        config_param.row       = strtol(argv[5], &p, 10);
-        config_param.col       = strtol(argv[6], &p, 10);
-        config_param.b4dac_val = argv[7];
-//        config_param.b4dac_val = strtol(argv[7], &p, 16);
-        config_param.b4dac_ib  = strtod(argv[8], &p);
-        config_param.col_ib    = strtod(argv[9], &p);
-        config_param.vr8b      = strtod(argv[10], &p);
-        config_param.arst_vref = strtod(argv[11], &p);
-        config_param.csa_vref  = strtod(argv[12], &p);
-        config_param.ains      = strtod(argv[13], &p);
-        config_param.addr_grst = strtod(argv[14], &p);
-    }
-    if(errno) {
-        error_printf("Value interpretation error.\n");
-        return EXIT_FAILURE;
-    }
-    
-    sockfd = get_socket(scopeAddress, scopePort);
+    printf("Settings: \n");
+    printf("scopeAddress: %s\n",  config_param.scopeAddress);
+    printf("scopePort: %s\n",     config_param.scopePort);
+    printf("stop_row:  %d\n",     config_param.stop_row);
+    printf("stop_col:  %d\n",     config_param.stop_col);
+    printf("clk_src:   0x%04x\n", config_param.clk_src);
+    printf("clk_div:   0x%04x\n", config_param.clk_div);
+    printf("b4dac_ib:  %g\n",     config_param.b4dac_ib);
+    printf("col_ib:    %g\n",     config_param.col_ib);
+    printf("vr8b:      %g\n",     config_param.vr8b);
+    printf("arst_vref: %g\n",     config_param.arst_vref);
+    printf("csa_vref:  %g\n",     config_param.csa_vref);
+    printf("ains:      %g\n",     config_param.ains);
+    printf("gring:     %g\n",     config_param.gring);
+
+    sockfd = get_socket(config_param.scopeAddress, config_param.scopePort);
     if(sockfd < 0) {
         error_printf("Failed to establish a socket.\n");
         return EXIT_FAILURE;
@@ -685,14 +578,9 @@ int main(int argc, char **argv)
     signal(SIGKILL, signal_kill_handler);
     signal(SIGINT, signal_kill_handler);
 
-    if((fp = fopen(outFileName, "w")) == NULL) {
-        perror(outFileName);
-        return EXIT_FAILURE;
-    }
-    
 //    pthread_create(&wTid, NULL, pop_and_save, &sockfd);
 
-    fprintf(stderr, "start time = %zd\n", startTime = time(NULL));
+    printf("start time = %zd\n", startTime = time(NULL));
 
 //    send_and_receive_loop(&sockfd);
 
@@ -700,16 +588,14 @@ int main(int argc, char **argv)
 
     configure_dac(sockfd, buf);
     configure_topmetal(sockfd, buf);
-    tm_digital_read(sockfd, nframemax, fp);
-    
+
     stopTime = time(NULL);
 //    pthread_join(wTid, NULL);
 
-    fprintf(stderr, "\nstart time = %zd\n", startTime);
-    fprintf(stderr, "stop time  = %zd\n", stopTime);
+    printf("\nstart time = %zd\n", startTime);
+    printf("stop time  = %zd\n", stopTime);
 
     close(sockfd);
-    fclose(fp);
     atexit_flush_files();
     return EXIT_SUCCESS;
 }

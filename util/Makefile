@@ -4,7 +4,7 @@ ARCH   = $(shell uname -m)
 CC             := gcc
 CXX            := g++
 INCLUDE        := -I.
-CFLAGS         := -Wall -O2
+CFLAGS         := -Wall -O2 -std=c99 -pedantic
 CFLAGS_32      := -m32
 SHLIB_CFLAGS   := -fPIC -shared
 SHLIB_EXT      := .so
@@ -14,11 +14,7 @@ LDFLAGS        :=
 TINYSCHEME_FEATURES := -DUSE_DL=1 -DUSE_MATH=1 -DUSE_ASCII_NAMES=0
 INCLUDE += -I/opt/local/include -I/usr/local/include -I./tinyscheme/trunk
 LIBS    += -L/opt/local/lib -L/usr/local/lib -lpthread -lhdf5
-GSLLIBS  = $(shell gsl-config --libs)
 GLLIBS   =
-ROOTCFLAGS = $(shell root-config --cflags)
-ROOTLIBS   = $(shell root-config --libs)
-ROOTGLIBS  = $(shell root-config --glibs)
 CFLAGS  += -DH5_NO_DEPRECATED_SYMBOLS
 LIBS    += $(GSLLIBS)
 ############################# OS & ARCH specifics #############################
@@ -56,7 +52,7 @@ ifeq ($(ARCH), ppc970)
   CFLAGS += -m64
 endif
 ############################ Define targets ###################################
-EXE_TARGETS = tcpio TMII-Digital waveview
+EXE_TARGETS = tcpio TMII-Digital TMII-Analog
 DEBUG_EXE_TARGETS = hdf5rawWaveformIo
 # SHLIB_TARGETS = XXX$(SHLIB_EXT)
 
@@ -72,6 +68,8 @@ debug_exe_targets: $(DEBUG_EXE_TARGETS)
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 tcpio: tcpio.c command.o
+	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
+TMII-Analog: TMII-Analog.c command.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
 TMII-Digital: TMII-Digital.c command.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@

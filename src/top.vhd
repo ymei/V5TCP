@@ -453,6 +453,16 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL tm_data_valid                     : std_logic;
   SIGNAL tm_data_clk                       : std_logic;
   SIGNAL tm_data_d                         : std_logic_vector(31 DOWNTO 0);
+  SIGNAL tm_markera                        : std_logic;
+  SIGNAL tm_rst_s                          : std_logic;
+  SIGNAL tm_start_s                        : std_logic;
+  SIGNAL tm_clk_s                          : std_logic;
+  SIGNAL dac_sclk                          : std_logic;
+  SIGNAL dac_d                             : std_logic;
+  SIGNAL dac_syncn                         : std_logic;
+  TYPE INT_ARRAY IS ARRAY (integer RANGE <>) OF integer;
+  SIGNAL tm_ctrl_sig                       : std_logic_vector(0 TO 5);
+  CONSTANT tm_ctrl_idx                     : INT_ARRAY(0 TO 5) := (0,1,2,4,5,6);
   ---------------------------------------------> Topmetal
   ---------------------------------------------< Data readback
   SIGNAL fifo36_din                        : std_logic_vector(35 DOWNTO 0);
@@ -684,11 +694,13 @@ BEGIN
       WR_PULSE => pulse_reg(1),  -- one pulse writes one word, regardless of pulse duration
       FULL     => OPEN,
       -- output
-      SCLK     => JD(5),
-      DOUT     => JD(4),
-      SYNCn    => JD(6)
+      SCLK     => dac_sclk, 
+      DOUT     => dac_d, 
+      SYNCn    => dac_syncn
     );
-
+  JD(5) <= dac_sclk;
+  JD(4) <= dac_d;
+  JD(6) <= dac_syncn;
   -- topmetal internal DAC
   topmetal_dac_inst : fifo2shiftreg
     GENERIC MAP (
@@ -743,11 +755,14 @@ BEGIN
       SRAM_D        => tm_sram_d,
       SRAM_WE       => tm_sram_we,
       TM_RST        => JC(3),           -- digital reset
-      TM_CLK_S      => JB(1),
-      TM_RST_S      => JB(5),
-      TM_START_S    => JB(0),
+      TM_CLK_S      => tm_clk_s,
+      TM_RST_S      => tm_rst_s,
+      TM_START_S    => tm_start_s,
       TM_SPEAK_S    => JB(4)
     );
+  JB(1)  <= tm_clk_s;
+  JB(5)  <= tm_rst_s;
+  JB(0)  <= tm_start_s;
   tm_rst <= reset OR config_reg(16*1+8);
   JB(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
   -- JA(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- replica
@@ -755,7 +770,7 @@ BEGIN
   WITH config_reg(16*6+1 DOWNTO 16*6) SELECT
     adc_refclk <= JB(2) WHEN "01",      -- optocoupler isolated
     JA(7)               WHEN "10",      -- pins on JA
-    JD(1)               WHEN "11",      -- pins on JD
+    clk_100MHz          WHEN "11",
     clki_cnt(3)         WHEN OTHERS;    -- 3.125MHz
   PROCESS (clk_50MHz, reset)            -- producing 50MHz/2**4 = 3.125MHz clock
   BEGIN
@@ -765,6 +780,30 @@ BEGIN
       clki_cnt <= clki_cnt + 1;
     END IF;
   END PROCESS;
+  -- signals over VHDCI J1
+  tm_ctrl_sig <= (0=>dac_sclk, 1=>dac_d, 2=>dac_syncn, 3=>tm_rst_s, 4=>tm_start_s, 5=>tm_clk_s);
+  tm_ctrl_obufds_insts : FOR i IN 0 TO 5 GENERATE
+    tm_ctrl_obufds_inst : OBUFDS
+      GENERIC MAP (
+        IOSTANDARD => "DEFAULT"
+      )
+      PORT MAP (
+        O  => VHDCI1P(tm_ctrl_idx(i)),  -- Diff_p output (connect directly to top-level port)
+        OB => VHDCI1N(tm_ctrl_idx(i)),  -- Diff_n output (connect directly to top-level port)
+        I  => tm_ctrl_sig(i)            -- Buffer input
+      );
+  END GENERATE;
+  tm_ctrl_ibufds_inst : IBUFDS
+    GENERIC MAP (
+      DIFF_TERM  => true,
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => tm_markera,
+      I  => VHDCI1P(3),
+      IB => VHDCI1N(3)
+    );
+  JA(4) <= tm_markera;
 
   -- digital
   topmetal_iiminus_digital_inst : topmetal_iiminus_digital
