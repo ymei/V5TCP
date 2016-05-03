@@ -483,9 +483,9 @@ int analyze_data(const char *buf, size_t n, size_t *hits, size_t *nframe)
         cntd    = v>>19;
         markerd = (v>>18) & 0x1;
         readyd  = (v>>17) & 0x01;
-        timed   = (v>>7)  & 0x1ff;
+        timed   = (v>>7)  & 0x3ff;
         addrd    = v      & 0x7f;
-        //printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
+        //printf("0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x3ff, v&0x7f);
         if(markerd) {
             icol = 0; cnti = cntd;
             (*nframe)++;
@@ -608,7 +608,7 @@ int tm_digital_read(int sockfd, size_t nframemax, FILE *fp)
             /* big endian to little endian */
             v = ibuf32[i]>>24 | (ibuf32[i]>>8 & 0x0000ff00) | (ibuf32[i]<<8 & 0x00ff0000)
                 | ibuf32[i]<<24;
-            fprintf(fp, "0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x1ff, v&0x7f);
+            fprintf(fp, "0x%04x %d %d 0x%03x 0x%02x\n", v>>19, (v>>18)&0x1, (v>>17)&0x1, (v>>7)&0x3ff, v&0x7f);
         }
         // analyze_data(ibuf, nb, hits, &nframe);
         nframe++;
