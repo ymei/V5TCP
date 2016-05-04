@@ -1,4 +1,7 @@
-----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--! @file fifo2shiftreg.vhd
+--! @brief Writes data into FIFO, then this module pushes them out via serial bus (SPI).
+--
 -- Company: 
 -- Engineer: Yuan Mei
 -- 

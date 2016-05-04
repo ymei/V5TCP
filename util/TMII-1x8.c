@@ -49,7 +49,7 @@
 #include <utmp.h>
 #elif defined(__FreeBSD__)
 #include <libutil.h>
-#else /* defined(__APPLE__) && defined(__MACH__) */
+#elif defined(__APPLE__) && defined(__MACH__)
 #include <util.h>
 #endif
 

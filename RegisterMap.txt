@@ -1,14 +1,15 @@
 config_reg      bits            purpose
 0               16              dac8568
 1               16              topmetal rst
-2               16              topmetal SWG, BTN
+2               16              topmetal clk_div
 3               16              topmetal stop_control
-4               16              topmetal trig control
-5               16              topmetal clock source
-6               16              topmetal trig delay
+4               16              topmetal trig delay
+5               16              topmetal trig rate
+6               16              topmetal clock source
 7                8              channel_decim
 8,9             32              ads5282
 10              16              ads5282 data selection
+11              16              spi_sync_n selection
 12,13           32              sdram WR_WRAP_AROUND, wr_addr_begin
 14,15           32              sdram post_trigger
 16,17           32              sdram idata_fifo_wren, trig_allow, rd_addr_end
@@ -19,11 +20,12 @@ status_reg
 pulse_reg
 0                               enforced trigger output
 1                               dac8568 write one word
-2                               ads5282 0
-3                               ads5282 1
-4                               ads5282 2
+2                               ads5282 0 config pulse
+3                               ads5282 0 reset
+4                               topmetal sram_wr_start
 5                               fifo96 trig (clear the fifo)
 6                               sdram ctrl_reset
 7                               sdram wr_stop
 8                               sdram rd_start
 9                               sdram data_fifo_reset
+10                              sdram wr_start

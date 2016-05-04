@@ -1,4 +1,6 @@
 --------------------------------------------------------------------------------
+--! @file top.vhd
+--! @brief Top-level
 --
 -- Company: LBNL
 -- Engineer: Yuan Mei
@@ -18,7 +20,6 @@
 -- Additional Comments: 
 --
 --------------------------------------------------------------------------------
---
 LIBRARY ieee;
 USE ieee.std_logic_1164.ALL;
 
@@ -293,29 +294,39 @@ ARCHITECTURE Behavioral OF top IS
   END COMPONENT;
   ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
-  COMPONENT topmetal_simple
+  COMPONENT topmetal_iiminus_analog
     GENERIC (
-      TRIGGER_DELAY_WIDTH  : positive := 16
+      ROWS          : positive := 72;   -- number of ROWS in the array
+      COLS          : positive := 72;   -- number of COLS in the ARRAY
+      CLK_DIV_WIDTH : positive := 16;
+      CONFIG_WIDTH  : positive := 16
     );
-    PORT(
-      RST                  : IN  std_logic;
-      CLK                  : IN  std_logic;
-      SWG                  : IN  std_logic_vector(7 DOWNTO 0);
-      BTN                  : IN  std_logic_vector(6 DOWNTO 0);
-      MARKER_IN            : IN  std_logic;
-      MARKER_OUT           : OUT std_logic;
-      STOP_CONTROL         : IN  std_logic;
-      STOP_ADDRESS         : IN  std_logic_vector(9 DOWNTO 0);
-      TRIGGER_CONTROL      : IN  std_logic;
-      TRIGGER_RATE_CONTROL : IN  std_logic;
-      TRIGGER_RATE         : IN  std_logic_vector (3 DOWNTO 0);
-      TRIGGER_DELAY        : IN  std_logic_vector (TRIGGER_DELAY_WIDTH-1 DOWNTO 0);
-      TRIGGER_OUT          : OUT std_logic;
-      TM_CLK               : OUT std_logic;
-      TM_RST               : OUT std_logic;
-      TM_START             : OUT std_logic;
-      TM_SPEAK             : OUT std_logic;
-      EX_RST_n             : OUT std_logic
+    PORT (
+      CLK           : IN  std_logic;  -- clock, TM_CLK_S is derived from this one
+      RESET         : IN  std_logic;    -- reset
+      -- data input for writing to in-chip SRAM
+      MEM_CLK       : IN  std_logic;    -- connect to control_interface
+      MEM_WE        : IN  std_logic;
+      MEM_ADDR      : IN  std_logic_vector(31 DOWNTO 0);
+      MEM_DIN       : IN  std_logic_vector(31 DOWNTO 0);
+      SRAM_WR_START : IN  std_logic;  -- 1 MEM_CLK wide pulse to initiate in-chip SRAM write
+      -- configuration
+      CLK_DIV       : IN  std_logic_vector(3 DOWNTO 0);  -- log2(CLK_DIV_WIDTH), CLK/(2**CLK_DIV)
+      STOP_ADDR     : IN  std_logic_vector(CONFIG_WIDTH-1 DOWNTO 0);  --MSB enables
+      TRIGGER_RATE  : IN  std_logic_vector(CONFIG_WIDTH-1 DOWNTO 0);  --trigger every () frames
+      TRIGGER_DELAY : IN  std_logic_vector(CONFIG_WIDTH-1 DOWNTO 0);
+      -- input
+      MARKER_A      : IN  std_logic;
+      -- output
+      TRIGGER_OUT   : OUT std_logic;
+      --
+      SRAM_D        : OUT std_logic_vector(4 DOWNTO 0);
+      SRAM_WE       : OUT std_logic;
+      TM_RST        : OUT std_logic;    -- digital reset
+      TM_CLK_S      : OUT std_logic;
+      TM_RST_S      : OUT std_logic;
+      TM_START_S    : OUT std_logic;
+      TM_SPEAK_S    : OUT std_logic
     );
   END COMPONENT;
   COMPONENT fifo2shiftreg
@@ -548,16 +559,23 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL sdram_trig_synced                 : std_logic;
   ---------------------------------------------> SDRAM
   ---------------------------------------------< Topmetal
-  SIGNAL dac_sclk                          : std_logic;
-  SIGNAL dac_dout                          : std_logic;
-  SIGNAL dac_sync_n                        : std_logic;
   SIGNAL led_cnt                           : unsigned(25 DOWNTO 0);
-  SIGNAL tm_btn                            : std_logic_vector(6 DOWNTO 0);
+  SIGNAL clki_cnt                          : unsigned(3 DOWNTO 0);
   SIGNAL tm_rst                            : std_logic;
-  SIGNAL tm_rst_s                          : std_logic;
   SIGNAL adc_refclk                        : std_logic;
   SIGNAL tm_trig_out                       : std_logic;
-  SIGNAL tm_ex_rst_n                       : std_logic;
+  SIGNAL tm_sram_d                         : std_logic_vector(4 DOWNTO 0);
+  SIGNAL tm_sram_we                        : std_logic;
+  SIGNAL tm_markera                        : std_logic;
+  SIGNAL tm_rst_s                          : std_logic;
+  SIGNAL tm_start_s                        : std_logic;
+  SIGNAL tm_clk_s                          : std_logic;
+  SIGNAL dac_sync_n                        : std_logic;
+  SIGNAL spi_sclk                          : std_logic_vector(3 DOWNTO 0);
+  SIGNAL spi_sclko                         : std_logic;
+  SIGNAL spi_data                          : std_logic_vector(3 DOWNTO 0);
+  SIGNAL spi_datao                         : std_logic;
+  SIGNAL spi_sync_n                        : std_logic_vector(3 DOWNTO 0);
   ---------------------------------------------> Topmetal
   ---------------------------------------------< ADC
   SIGNAL ads5282_0_data_p                  : std_logic_vector(7 DOWNTO 0);
@@ -934,59 +952,139 @@ BEGIN
       WR_PULSE => pulse_reg(1),  -- one pulse writes one word, regardless of pulse duration
       FULL     => OPEN,
       -- output
-      SCLK     => dac_sclk,
-      DOUT     => dac_dout,
+      SCLK     => spi_sclk(0),
+      DOUT     => spi_data(0),
       SYNCn    => dac_sync_n
     );
-  dac_sclk_obuf_inst : OBUF
-    PORT MAP (
-      O  => VHDCI2P(14),
-      I  => dac_sclk
-    );
-  dac_dout_obuf_inst : OBUF
+  spi_sync_n0_obuf_inst : OBUF
     PORT MAP (
       O  => VHDCI2P(13),
-      I  => dac_dout
+      I  => spi_sync_n(0)
     );
-  dac_sync_n_obuf_inst : OBUF
+  spi_sync_n1_obuf_inst : OBUF
     PORT MAP (
-      O  => VHDCI2P(15),
-      I  => dac_sync_n
+      O  => VHDCI2N(13),
+      I  => spi_sync_n(1)
     );
+  spi_sync_n2_obuf_inst : OBUF
+    PORT MAP (
+      O  => VHDCI2N(14),
+      I  => spi_sync_n(2)
+    );
+  spi_sync_n3_obuf_inst : OBUF
+    PORT MAP (
+      O  => VHDCI2P(14),
+      I  => spi_sync_n(3)
+    );
+  spi_sclk_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI2P(16),  -- Diff_p output (connect directly to top-level port)
+      OB => VHDCI2N(16),  -- Diff_n output (connect directly to top-level port)
+      I  => spi_sclko
+    );
+  spi_data_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI2P(15),  -- Diff_p output (connect directly to top-level port)
+      OB => VHDCI2N(15),  -- Diff_n output (connect directly to top-level port)
+      I  => spi_datao
+    );
+  spi_sync_n(0) <= dac_sync_n WHEN config_reg(16*11+1 DOWNTO 16*11) = "00" ELSE '1';
+  spi_sync_n(1) <= dac_sync_n WHEN config_reg(16*11+1 DOWNTO 16*11) = "01" ELSE '1';
+  spi_sync_n(2) <= dac_sync_n WHEN config_reg(16*11+1 DOWNTO 16*11) = "10" ELSE '1';
+  spi_sclko     <= spi_sclk(0) OR spi_sclk(3);
+  spi_datao     <= spi_data(0) OR spi_data(3);
   --
-  topmetal_simple_inst : topmetal_simple PORT MAP (
-    RST                  => tm_rst,
-    CLK                  => adc_refclk,
-    SWG                  => config_reg(16*3-1-8 DOWNTO 16*2),
-    BTN                  => tm_btn,
-    MARKER_IN            => JC(2),
-    MARKER_OUT           => OPEN,
-    STOP_CONTROL         => config_reg(16*4-1),
-    STOP_ADDRESS         => config_reg(16*4-1-6 DOWNTO 16*3),
-    TRIGGER_CONTROL      => config_reg(16*5-2),
-    TRIGGER_RATE_CONTROL => config_reg(16*5-1),
-    TRIGGER_RATE         => config_reg(16*5-1-12 DOWNTO 16*4),
-    TRIGGER_DELAY        => config_reg(16*7-1 DOWNTO 16*6),
-    TRIGGER_OUT          => tm_trig_out,
-    TM_CLK               => JC(5),
-    TM_RST               => tm_rst_s,
-    TM_START             => JC(4),
-    TM_SPEAK             => JC(0),
-    EX_RST_n             => tm_ex_rst_n
-  );
-  tm_btn(6) <= config_reg(16*3-1-7);
-  tm_btn(1) <= config_reg(16*3-1-6);
-  tm_btn(0) <= config_reg(16*3-1-5);
-  tm_rst    <= reset OR config_reg(16*1+8);
-  JD(0)     <= tm_rst_s;
-  JD(3)     <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
-  JC(1)     <= tm_ex_rst_n OR config_reg(16*3-1);  -- ex_rst
-  WITH config_reg(16*5+1 DOWNTO 16*5) SELECT
-    adc_refclk <= JD(6) WHEN "01",      -- diff in, converted to single-ended
-    JB(3)               WHEN "10",      -- pins on JB
-    JB(7)               WHEN "11",      -- pins on JB
-    clk_50MHz           WHEN OTHERS;
-  
+  topmetal_iiminus_analog_inst : topmetal_iiminus_analog
+    GENERIC MAP (
+      ROWS          => 72,              -- number of ROWS in the array
+      COLS          => 72,              -- number of COLS in the ARRAY
+      CLK_DIV_WIDTH => 16,
+      CONFIG_WIDTH  => 16
+    )
+    PORT MAP (
+      CLK           => adc_refclk,  -- clock, TM_CLK_S is derived from this one
+      RESET         => tm_rst,      -- reset
+      -- data input for writing to in-chip SRAM
+      MEM_CLK       => control_clk,
+      MEM_WE        => control_mem_we,
+      MEM_ADDR      => control_mem_addr,
+      MEM_DIN       => control_mem_din,
+      SRAM_WR_START => pulse_reg(4),  -- 1 MEM_CLK wide pulse to initiate in-chip SRAM write
+      -- configuration
+      CLK_DIV       => config_reg(16*2+3 DOWNTO 16*2),  -- log2(CLK_DIV_WIDTH), CLK/(2**CLK_DIV)
+      STOP_ADDR     => config_reg(16*4-1 DOWNTO 16*3),  -- MSB enables
+      TRIGGER_RATE  => config_reg(16*6-1 DOWNTO 16*5),  -- trigger every () frames
+      TRIGGER_DELAY => config_reg(16*5-1 DOWNTO 16*4),
+      -- input
+      MARKER_A      => JB(6),
+      -- output
+      TRIGGER_OUT   => tm_trig_out,
+      --
+      SRAM_D        => tm_sram_d,
+      SRAM_WE       => tm_sram_we,
+      TM_RST        => JC(3),           -- digital reset
+      TM_CLK_S      => tm_clk_s,
+      TM_RST_S      => tm_rst_s,
+      TM_START_S    => tm_start_s,
+      TM_SPEAK_S    => JB(4)
+    );
+  JB(1)  <= tm_clk_s;
+  JB(5)  <= tm_rst_s;
+  JB(0)  <= tm_start_s;
+  tm_rst <= reset OR config_reg(16*1+8);
+  JB(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- trigger to digitizer
+  JA(3)  <= (tm_trig_out AND (NOT config_reg(16*3-2))) OR pulse_reg(0) OR BTN(0);  -- replica
+  JB(7)  <= config_reg(16*3-1);         -- ex_rst
+  -- clock source selection
+  WITH config_reg(16*6+1 DOWNTO 16*6) SELECT
+    adc_refclk <= JB(2) WHEN "01",      -- optocoupler isolated
+    JA(7)               WHEN "10",      -- pins on JA
+    clk_100MHz          WHEN "11",
+    clki_cnt(3)         WHEN OTHERS;    -- 3.125MHz
+  PROCESS (clk_50MHz, reset)            -- producing 50MHz/2**4 = 3.125MHz clock
+  BEGIN
+    IF reset = '1' then
+      clki_cnt <= (OTHERS => '0');
+    ELSIF rising_edge(clk_50MHz) then
+      clki_cnt <= clki_cnt + 1;
+    END IF;
+  END PROCESS;
+  -- signals over VHDCI J1
+  tm_rst_s_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI2P(19),  -- Diff_p output (connect directly to top-level port)
+      OB => VHDCI2N(19),  -- Diff_n output (connect directly to top-level port)
+      I  => tm_rst_s
+    );
+  tm_start_s_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI2P(18),  -- Diff_p output (connect directly to top-level port)
+      OB => VHDCI2N(18),  -- Diff_n output (connect directly to top-level port)
+      I  => tm_start_s
+    );
+  tm_clk_s_obufds_inst : OBUFDS
+    GENERIC MAP (
+      IOSTANDARD => "DEFAULT"
+    )
+    PORT MAP (
+      O  => VHDCI2P(17),  -- Diff_p output (connect directly to top-level port)
+      OB => VHDCI2N(17),  -- Diff_n output (connect directly to top-level port)
+      I  => tm_clk_s
+    );
+
+  -- LED
   PROCESS (adc_refclk, reset)
   BEGIN
     IF reset = '1' then
@@ -996,7 +1094,7 @@ BEGIN
     END IF;
   END PROCESS;
   usr_data_output(3-2 DOWNTO 0) <= std_logic_vector(led_cnt(25-2 DOWNTO 22));
-  usr_data_output(7)          <= sdram_phy_init_done;
+  usr_data_output(7)            <= sdram_phy_init_done;
   led_obufs : FOR i IN 0 TO 7 GENERATE
     led_obuf : OBUF
       PORT MAP (
@@ -1030,8 +1128,8 @@ BEGIN
       CONFPS  => ads5282_0_confps,
       CONFULL => OPEN,
       --
-      ADCLKp  => VHDCI2P(8),           -- LVDS frame clock (1X)
-      ADCLKn  => VHDCI2N(8),
+      ADCLKp  => VHDCI2P(11),           -- LVDS frame clock (1X)
+      ADCLKn  => VHDCI2N(11),
       LCLKp   => VHDCI2P(9),           -- LVDS bit clock (6X)
       LCLKn   => VHDCI2N(9),
       DATAp   => ads5282_0_data_p,
@@ -1040,9 +1138,9 @@ BEGIN
       ADCLK   => ads5282_0_adclk,
       DATA    => ads5282_0_data,
       --
-      SCLK    => VHDCI2P(12),
-      SDATA   => VHDCI2P(11),
-      CSn     => VHDCI2P(10)
+      SCLK    => spi_sclk(3),
+      SDATA   => spi_data(3),
+      CSn     => spi_sync_n(3)
     );
   ads5282_0_data_p <= (VHDCI2P(7), VHDCI2P(6), VHDCI2P(5), VHDCI2P(4),
                        VHDCI2P(3), VHDCI2P(2), VHDCI2P(1), VHDCI2P(0));

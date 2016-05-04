@@ -1,4 +1,7 @@
+/** \mainpage
+@brief
 Genesys Virtex-5 1-gigabit ethernet (TCP) control board
+\verbatim
 --------------------------------------------------------------------------------
 Run the entire synthesis / build on command line:
 Create a top-level directory, in parallel to src and ipcore_dir, cd
@@ -59,3 +62,5 @@ EMAC TCP:
     Its size should be no smaller than the FIFO read request size (NBASK)
     in the TCP read program.  Changing the fifo to BRAM type (512 writes)
     eliminated the problem.
+\endverbatim
+*/
