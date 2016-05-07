@@ -997,8 +997,12 @@ BEGIN
   spi_sync_n(0) <= dac_sync_n WHEN config_reg(16*11+1 DOWNTO 16*11) = "00" ELSE '1';
   spi_sync_n(1) <= dac_sync_n WHEN config_reg(16*11+1 DOWNTO 16*11) = "01" ELSE '1';
   spi_sync_n(2) <= dac_sync_n WHEN config_reg(16*11+1 DOWNTO 16*11) = "10" ELSE '1';
-  spi_sclko     <= spi_sclk(0) OR spi_sclk(3);
-  spi_datao     <= spi_data(0) OR spi_data(3);
+  WITH config_reg(16*11+1 DOWNTO 16*11) SELECT
+    spi_sclko <= spi_sclk(3) WHEN "11",
+    spi_sclk(0)              WHEN OTHERS;
+  WITH config_reg(16*11+1 DOWNTO 16*11) SELECT
+    spi_datao <= spi_data(3) WHEN "11",
+    spi_data(0)              WHEN OTHERS;
   --
   topmetal_iiminus_analog_inst : topmetal_iiminus_analog
     GENERIC MAP (
@@ -1045,7 +1049,7 @@ BEGIN
   WITH config_reg(16*6+1 DOWNTO 16*6) SELECT
     adc_refclk <= JB(2) WHEN "01",      -- optocoupler isolated
     JA(7)               WHEN "10",      -- pins on JA
-    clk_100MHz          WHEN "11",
+    ads5282_0_adclk     WHEN "11",
     clki_cnt(3)         WHEN OTHERS;    -- 3.125MHz
   PROCESS (clk_50MHz, reset)            -- producing 50MHz/2**4 = 3.125MHz clock
   BEGIN

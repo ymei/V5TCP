@@ -52,7 +52,7 @@ ifeq ($(ARCH), ppc970)
   CFLAGS += -m64
 endif
 ############################ Define targets ###################################
-EXE_TARGETS = tcpio TMII-8ChipBM waveview TMII-Analog
+EXE_TARGETS = tcpio TMII-1x8 waveview
 DEBUG_EXE_TARGETS = hdf5rawWaveformIo
 # SHLIB_TARGETS = XXX$(SHLIB_EXT)
 
@@ -71,7 +71,7 @@ tcpio: tcpio.c command.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
 TMII-Analog: TMII-Analog.c command.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
-TMII-1x8: TMII-1x8.c command.o
+TMII-1x8: TMII-1x8.c command.o hdf5rawWaveformIo.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
 waveview: waveview.c hdf5rawWaveformIo.o
 	$(CC) $(CFLAGS) $(INCLUDE) -Wno-deprecated-declarations $^ $(LIBS) $(GLLIBS) $(LDFLAGS) -o $@

@@ -1,5 +1,7 @@
-/*
- * Copyright (c) 2015
+/** \file TMII-1x8
+ * Control a 1x8 array of Topmetal-II- and read back the digitizer output
+ *
+ * Copyright (c) 2015, 2016
  *
  *     Yuan Mei
  *
@@ -26,7 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * TMII-8ChipBM host port ...
+ * TMII-1x8 host port ...
  */
 
 /* waitpid on linux */
@@ -62,11 +64,32 @@
 #include <termios.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <getopt.h>
 
 #include "common.h"
 #include "hdf5rawWaveformIo.h"
 #include "command.h"
 
+#define NTM 8
+#define TM_NCOL 72
+#define TM_NROW 72
+struct config_parameters
+{
+    char *scopeAddress;
+    char *scopePort;
+    int stop_row;
+    int stop_col;
+    uint16_t clk_src;
+    uint16_t clk_div;
+    double fe_off[NTM];
+    double arst_vref[NTM];
+    double csa_vref[NTM];
+};
+struct config_parameters config_param,
+    config_param_defaults={"192.168.2.3", "1024", -1, -1, 0x0000, 0x0003,
+                           {0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8},
+                           {0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9},
+                           {0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8}};
 static time_t startTime, stopTime;
 
 static unsigned int chMask;
@@ -291,11 +314,23 @@ end:
 int configure_dac(int sockfd, char *buf)
 {
     uint32_t *buf32, val;
+    ssize_t i;
     size_t n;
+    double cvmap[NTM] = {config_param.csa_vref[0], config_param.csa_vref[2], config_param.arst_vref[0], config_param.arst_vref[2],
+                         config_param.csa_vref[1], config_param.csa_vref[3], config_param.arst_vref[1], config_param.arst_vref[3]};
+    double cvmap1[NTM] = {config_param.csa_vref[4], config_param.csa_vref[6],config_param.arst_vref[4], config_param.arst_vref[6],
+                          config_param.csa_vref[5], config_param.csa_vref[7],config_param.arst_vref[5], config_param.arst_vref[7]};
+    double ofmap[NTM] = {config_param.fe_off[0], config_param.fe_off[4], config_param.fe_off[1], config_param.fe_off[5],
+                         config_param.fe_off[2], config_param.fe_off[6], config_param.fe_off[3], config_param.fe_off[7]};
+    
     buf32 = (uint32_t*)buf;
-    /* DAC8568 for analog frontend */
+
+#define DACVolt(x) ((uint16_t)((double)(x)/2.5 * 65536.0))
+    /* DAC8568 for CSA vref and reset */
+    /* Select SPI Chip 0 */
+    n = cmd_write_register(&buf32, 11, 0x0000);
+    n = query_response(sockfd, buf, n, buf, 0);
     /* turn on internal vref = 2.5V, so the output is val/65536.0 * 5.0 [V] */
-#define DACVolt(x) ((uint16_t)((double)(x)/5.0 * 65536.0))
     n = cmd_write_register(&buf32, 0, 0x0800);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
@@ -304,29 +339,119 @@ int configure_dac(int sockfd, char *buf)
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output1 */
-    val = (0x03<<24) | (0x00 << 20) | (DACVolt(1.0) << 4);
-    n = cmd_write_register(&buf32, 0, (val & 0xffff0000)>>16);
+    for(i=0; i<NTM; i++) {
+        val = (0x03<<24) | (i << 20) | (DACVolt(cvmap[i]) << 4);
+        n = cmd_write_register(&buf32, 0, (val & 0xffff0000)>>16);
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_write_register(&buf32, 0, val & 0xffff);
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+        n = query_response(sockfd, buf, n, buf, 0);
+    }
+    /* Select SPI Chip 1 */
+    n = cmd_write_register(&buf32, 11, 0x0001);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* turn on internal vref = 2.5V, so the output is val/65536.0 * 5.0 [V] */
+    n = cmd_write_register(&buf32, 0, 0x0800);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 0, val & 0xffff);
+    n = cmd_write_register(&buf32, 0, 0x0001);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output2 */
-    val = (0x03<<24) | (0x01 << 20) | (DACVolt(2.5) << 4);
-    n = cmd_write_register(&buf32, 0, (val & 0xffff0000)>>16);
+    for(i=0; i<NTM; i++) {
+        val = (0x03<<24) | (i << 20) | (DACVolt(cvmap1[i]) << 4);
+        n = cmd_write_register(&buf32, 0, (val & 0xffff0000)>>16);
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_write_register(&buf32, 0, val & 0xffff);
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+        n = query_response(sockfd, buf, n, buf, 0);
+    }
+    /* DAC8568 for analog frontend */
+    /* Select SPI Chip 2 */
+    n = cmd_write_register(&buf32, 11, 0x0002);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* turn on internal vref = 2.5V, so the output is val/65536.0 * 5.0 [V] */
+    n = cmd_write_register(&buf32, 0, 0x0800);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 0, val & 0xffff);
+    n = cmd_write_register(&buf32, 0, 0x0001);
     n = query_response(sockfd, buf, n, buf, 0);
     n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
     n = query_response(sockfd, buf, n, buf, 0);
+    for(i=0; i<NTM; i++) {
+        val = (0x03<<24) | (i << 20) | (DACVolt(ofmap[i]) << 4);
+        n = cmd_write_register(&buf32, 0, (val & 0xffff0000)>>16);
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_write_register(&buf32, 0, val & 0xffff);
+        n = query_response(sockfd, buf, n, buf, 0);
+        n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
+        n = query_response(sockfd, buf, n, buf, 0);
+    }
 
     return 1;
 #undef DACVolt
+}
+
+int configure_topmetal(int sockfd, char *buf)
+{
+    uint32_t *buf32;
+    size_t n;
+
+    buf32 = (uint32_t*)buf;
+    /* select clock source */
+    n = cmd_write_register(&buf32, 6, config_param.clk_src);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* trigger rate control, 1 trigger every val frames */
+    n = cmd_write_register(&buf32, 5, 0x0001);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* trigger delay, trigger_out at val TM_CLK cycles after new frame starts */
+    n = cmd_write_register(&buf32, 4, 0x0000);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* (bit 3 downto 0) controls TM_CLK = f_CLK/2**(bit 3 downto 0) */
+    /* bit 15 sets the output of EX_RST, bit 14 vetos trigger_out */
+    n = cmd_write_register(&buf32, 2, 0x4000 | config_param.clk_div);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
+    n = cmd_write_register(&buf32, 3, 0x0a20);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* bit 8 [high] resets topmetal_iiminus_analog module */
+    n = cmd_write_register(&buf32, 1, 0x0100);
+    n = query_response(sockfd, buf, n, buf, 0);
+    Sleep(1);
+    n = cmd_write_register(&buf32, 1, 0x0000);
+    n = query_response(sockfd, buf, n, buf, 0);
+
+    /* allow trigger output since the first trigger out will happen
+     * right after sram write.  Pay attention to TM_CLK rate here as well. */
+    n = cmd_write_register(&buf32, 2, config_param.clk_div);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* write sram */
+    n = cmd_send_pulse(&buf32, 0x08); /* pulse_reg(3) */
+    n = query_response(sockfd, buf, n, buf, 0);
+
+/* force a trigger */
+    // Sleep(100);
+    // n = cmd_send_pulse(&buf32, 0x01); /* pulse_reg(0) */
+    // n = query_response(sockfd, buf, n, buf, 0);
+
+    /* stop on a pixel */
+    /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
+    if(config_param.stop_row >= 0 && config_param.stop_col >= 0) {
+        n = cmd_write_register(&buf32, 3, 0x8000 | (config_param.stop_row * TM_NCOL + config_param.stop_col));
+        n = query_response(sockfd, buf, n, buf, 0);
+    }
+
+    return 1;
 }
 
 int configure_adc(int sockfd, char *buf, int opt)
@@ -350,6 +475,9 @@ int configure_adc(int sockfd, char *buf, int opt)
     buf32 = (uint32_t*)buf;
     /* reset ads5282_interface module */
     n = cmd_send_pulse(&buf32, (1<<3) & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* Select SPI Chip 3 */
+    n = cmd_write_register(&buf32, 11, 0x0003);
     n = query_response(sockfd, buf, n, buf, 0);
     Sleep(2);
     /* serial data, low 24 bit is effective */
@@ -443,17 +571,17 @@ int configure_adc(int sockfd, char *buf, int opt)
 int genesys_prepare(int sockfd)
 {
     char buf[BUFSIZ];
-    uint32_t *buf32, val;
-    uint64_t retcmd, cid;
+    uint32_t *buf32;
     size_t n;
-    ssize_t i;
 
     buf32 = (uint32_t*)buf;
 
     /* adc, iodelay etc. */
-    configure_adc(sockfd, buf, 0);
+    configure_adc(sockfd, buf, 1);
     /* dac */
     configure_dac(sockfd, buf);
+    /* topmetal */
+    configure_topmetal(sockfd, buf);
 
     /* wr_addr_begin */
     n = cmd_write_register(&buf32, 12, 0x0000);
@@ -662,7 +790,6 @@ int main(int argc, char **argv)
     /**/
     int sockfd;
     unsigned int v, c;
-    double dac_offset_volt = 0.0;
     pthread_t wTid;
     ssize_t i;
     size_t nWfmPerChunk = 1;
@@ -674,6 +801,9 @@ int main(int argc, char **argv)
         error_printf("decimMask(0x..): high 4-bit is offset, low 4-bit is stride\n");
         return EXIT_FAILURE;
     }
+
+    memcpy(&config_param, &config_param_defaults, sizeof(config_param));
+
     scopeAddress = argv[1];
     scopePort = argv[2];
     outFileName = argv[3];
@@ -702,7 +832,7 @@ int main(int argc, char **argv)
         nWfmPerChunk = atol(argv[7]);
     
     debug_printf("outFileName: %s, chMask: 0x%04x, nCh: %zd, decimMask: 0x%02x, nEvents: %zd, nWfmPerChunk: %zd\n",
-                 outFileName, chMask, nCh, decomMask, nEvents, nWfmPerChunk);
+                 outFileName, chMask, nCh, decimMask, nEvents, nWfmPerChunk);
 
     waveformAttr.chMask  = chMask;
     waveformAttr.nPt     = SCOPE_MEM_LENGTH_MAX * (SCOPE_NCH / nCh);
@@ -715,7 +845,7 @@ int main(int argc, char **argv)
         /* ADC outputs straight binary */
         waveformAttr.yoff[i]  = 0.0;
         /* DAC controlled electrical offset at input */
-        waveformAttr.yzero[i] = dac_offset_volt;
+        waveformAttr.yzero[i] = config_param.fe_off[i];
     }
         
     sockfd = get_socket(scopeAddress, scopePort);
@@ -732,7 +862,6 @@ int main(int argc, char **argv)
     }
 
     genesys_prepare(sockfd);
-    printf("DAC Offset: %g Volts\n", dac_offset_volt);
     
     waveformFile = hdf5io_open_file(outFileName, nWfmPerChunk, nCh);
     hdf5io_write_waveform_attribute_in_file_header(waveformFile, &waveformAttr);
@@ -747,7 +876,7 @@ int main(int argc, char **argv)
 //    send_and_receive_loop(&sockfd);
 
     for(waveformEvent.eventId = 0; waveformEvent.eventId < nEvents; waveformEvent.eventId++) {
-        genesys_arm_acquire(sockfd);        
+        genesys_arm_acquire(sockfd);
         genesys_read_save(sockfd);
     }
     
