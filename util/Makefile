@@ -4,7 +4,7 @@ ARCH   = $(shell uname -m)
 CC             := gcc
 CXX            := g++
 INCLUDE        := -I.
-CFLAGS         := -Wall -O2 -std=c99 -pedantic
+CFLAGS         := -Wall -O2 -std=c99 -pedantic -D_XOPEN_SOURCE=600
 CFLAGS_32      := -m32
 SHLIB_CFLAGS   := -fPIC -shared
 SHLIB_EXT      := .so

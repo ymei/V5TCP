@@ -35,7 +35,7 @@ USE work.common_pkg.ALL;
 
 ENTITY top IS
   GENERIC (
-    includeChipscope : boolean := false
+    includeChipscope : boolean := true
   );
   PORT (
     clk_xtal      : IN    std_logic;
@@ -527,7 +527,7 @@ BEGIN
     cs_vio_inst : cs_vio
       PORT MAP (
         CONTROL   => cs_control1,
-        CLK       => clk_125MHz,
+        CLK       => control_clk,
         ASYNC_IN  => cs_vio_asyncin,
         ASYNC_OUT => cs_vio_asyncout,
         SYNC_IN   => cs_vio_syncin,
@@ -536,10 +536,9 @@ BEGIN
     cs_ila_inst : cs_ila
       PORT MAP (
         CONTROL => cs_control0,
-        CLK     => NOT clk_125MHz,
+        CLK     => control_clk,
         TRIG0   => cs_trig0
       );
-    cs_trig0(39) <= clk_100MHz;
   END GENERATE IncChipScope;
   ---------------------------------------------> Chipscope
   ---------------------------------------------< gig_eth
@@ -626,7 +625,7 @@ BEGIN
       RX_RDY  => uart_rx_rdy,
       TX_DATA => DIPSw8Bit,
       TX_EN   => '1',
-      TX_RDY  => cs_trig0(2),
+      TX_RDY  => OPEN,
       -- serial lines
       RX_PIN  => UART_RX_PIN,
       TX_PIN  => UART_TX_PIN
@@ -673,7 +672,9 @@ BEGIN
       DATA_FIFO_RDCLK => control_data_fifo_rdclk
     );
   control_clk           <= clk_125MHz;
-  cs_trig0(18 DOWNTO 3) <= pulse_reg;
+  cs_trig0(39)          <= control_mem_we;
+  cs_trig0(38 DOWNTO 32)<= control_mem_addr(6 DOWNTO 0);
+  cs_trig0(31 DOWNTO 0) <= control_mem_din;
   cs_vio_syncin         <= config_reg(35 DOWNTO 0);
   cs_vio_asyncin        <= config_reg(71 DOWNTO 36);
   ---------------------------------------------> UART/RS232
@@ -889,7 +890,7 @@ BEGIN
     PORT MAP (
       clk => clk_125MHz,
       I   => BTN(0),
-      O   => cs_trig0(1)
+      O   => OPEN
     );
   
 END Behavioral;

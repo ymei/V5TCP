@@ -280,7 +280,7 @@ end:
 int main(int argc, char **argv)
 {
     char buf[BUFSIZ];
-    uint32_t *buf32, val;
+    uint32_t *buf32, val, aval[BUFSIZ];
     char *p, *outFileName, *scopeAddress, *scopePort;
     unsigned int v, c;
     int sockfd;
@@ -333,149 +333,19 @@ int main(int argc, char **argv)
     /* dac value, for usage demo, not in effect */
     // n = cmd_write_register(&buf32, 0, 40632); // 3.1V
     n = cmd_write_register(&buf32, 0, 32768); // 2.5V
-    // n = cmd_read_register(&buf32, 3);
+    n = query_response(sockfd, buf, n, buf, 0);
+    n = cmd_read_register(&buf32, 0);
     printf("sent: ");
     for(i=0; i<n; i++) {
         printf("%02x ", (unsigned char)buf[i]);
     }
     printf("\n");
-    n = query_response(sockfd, buf, n, buf, 0);
+    n = query_response(sockfd, buf, n, buf, 4);
     printf("received: ");
     for(i=0; i<n; i++) {
         printf("%02x ", (unsigned char)buf[i]);
     }
     printf("\n");
-
-    /* DAC8568 for TopmetalII- */
-    /* turn on internal vref = 2.5V, so the output is val/65536.0 * 5.0 [V] */
-#define DACVolt(x) ((uint16_t)((double)(x)/5.0 * 65536.0))
-    n = cmd_write_register(&buf32, 7, 0x0800);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, 0x0001);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output1 : DAC_EX_VREF */
-    val = (0x03<<24) | (0x00 << 20) | (DACVolt(2.5) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output2 : 4BDAC_IB */
-    val = (0x03<<24) | (0x01 << 20) | (DACVolt(0.684) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output3 : COL_IB */
-    val = (0x03<<24) | (0x02 << 20) | (DACVolt(0.9) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output4 : Gring */
-    val = (0x03<<24) | (0x03 << 20) | (DACVolt(0.0) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* TopmetalII- internal DAC */
-#if 0
-    /*    ARST_VREF    VR8B          CSA_VREF */
-    val = (0x4f<<16) | (0xfc << 8) | (0x34);
-    n = cmd_write_register(&buf32, 8, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x04); /* pulse_reg(2) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 8, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x04); /* pulse_reg(2) */
-    n = query_response(sockfd, buf, n, buf, 0);
-#endif
-    /* use external DAC to set bias */
-    /* write and update output6 : VR8B */
-    val = (0x03<<24) | (0x05 << 20) | (DACVolt(3.078) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output7 : ARST_VREF */
-    val = (0x03<<24) | (0x06 << 20) | (DACVolt(0.840) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output5 : CSA_VREF */
-    val = (0x03<<24) | (0x04 << 20) | (DACVolt(0.700) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* write and update output8 : AINS */
-    val = (0x03<<24) | (0x07 << 20) | (DACVolt(0.000) << 4);
-    n = cmd_write_register(&buf32, 7, (val & 0xffff0000)>>16);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_write_register(&buf32, 7, val & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    n = cmd_send_pulse(&buf32, 0x02); /* pulse_reg(1) */
-    n = query_response(sockfd, buf, n, buf, 0);
-#undef DACVolt
-    Sleep(20); /* Wait for shiftreg to finish */
-
-    /* select clock source */
-    n = cmd_write_register(&buf32, 6, 0x0001);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* trigger rate control, 1 trigger every val frames */
-    n = cmd_write_register(&buf32, 5, 0x0001);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* trigger delay, trigger_out at val TM_CLK cycles after new frame starts */
-    n = cmd_write_register(&buf32, 4, 0x0000);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* (bit 3 downto 0) controls TM_CLK = f_CLK/2**(bit 3 downto 0) */
-    /* bit 15 sets the output of EX_RST, bit 14 vetos trigger_out */
-    n = cmd_write_register(&buf32, 2, 0x4001);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* bit 15 enables stop_control, the rest of bits set the stop_address within a frame */
-    n = cmd_write_register(&buf32, 3, 0x0a20);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* bit 8 [high] resets topmetal_iiminus_analog module */
-    n = cmd_write_register(&buf32, 1, 0x0100);
-    n = query_response(sockfd, buf, n, buf, 0);
-    Sleep(1);
-    n = cmd_write_register(&buf32, 1, 0x0000);
-    n = query_response(sockfd, buf, n, buf, 0);
 
     /* allow trigger output since the first trigger out will happen
      * right after sram write.  Pay attention to TM_CLK rate here as well. */
@@ -490,6 +360,15 @@ int main(int argc, char **argv)
     // n = cmd_send_pulse(&buf32, 0x01); /* pulse_reg(0) */
     // n = query_response(sockfd, buf, n, buf, 0);
 
+/* write memory */
+    aval[0]=0x12345678;
+    aval[1]=0x9abcdef0;
+    aval[2]=0x5a5a5a5a;
+    aval[3]=0xa5a5a5a5;
+
+    n = cmd_write_memory(&buf32, 0, aval, 4);
+    n = query_response(sockfd, buf, n, buf, 0);
+    
     stopTime = time(NULL);
 //    pthread_join(wTid, NULL);
 
