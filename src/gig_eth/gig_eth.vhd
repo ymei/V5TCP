@@ -37,6 +37,11 @@ ENTITY gig_eth IS
     GMII_CRS_0           : IN  std_logic;
     PHY_RST_n            : OUT std_logic;
     -- TCP
+    MAC_ADDR             : IN std_logic_vector(47 DOWNTO 0);
+    IPv4_ADDR            : IN std_logic_vector(31 DOWNTO 0);
+    IPv6_ADDR            : IN std_logic_vector(127 DOWNTO 0);
+    SUBNET_MASK          : IN std_logic_vector(31 DOWNTO 0);
+    GATEWAY_IP_ADDR      : IN std_logic_vector(31 DOWNTO 0);
     TCP_CONNECTION_RESET : IN  std_logic;
     TX_TDATA             : IN  std_logic_vector(7 DOWNTO 0);
     TX_TVALID            : IN  std_logic;
@@ -219,18 +224,20 @@ ARCHITECTURE wrapper OF gig_eth IS
       TP      : OUT std_logic_vector(10 DOWNTO 1)
     );
   END COMPONENT;
-
+  -- Must have programmable full with single-threshold of 61
+  -- out of total write-depth 64
   COMPONENT fifo8to32
     PORT (
-      rst    : IN  std_logic;
-      wr_clk : IN  std_logic;
-      rd_clk : IN  std_logic;
-      din    : IN  std_logic_vector(7 DOWNTO 0);
-      wr_en  : IN  std_logic;
-      rd_en  : IN  std_logic;
-      dout   : OUT std_logic_vector(31 DOWNTO 0);
-      full   : OUT std_logic;
-      empty  : OUT std_logic
+      rst       : IN  std_logic;
+      wr_clk    : IN  std_logic;
+      rd_clk    : IN  std_logic;
+      din       : IN  std_logic_vector(7 DOWNTO 0);
+      wr_en     : IN  std_logic;
+      rd_en     : IN  std_logic;
+      dout      : OUT std_logic_vector(31 DOWNTO 0);
+      full      : OUT std_logic;
+      prog_full : OUT std_logic;
+      empty     : OUT std_logic
     );
   END COMPONENT;
 
@@ -264,6 +271,11 @@ ARCHITECTURE wrapper OF gig_eth IS
   SIGNAL emac_ll_rx_dst_rdy       : std_logic;
   SIGNAL emac_ll_rx_data          : std_logic_vector (7 DOWNTO 0);
   -- tcp
+  SIGNAL tcp_mac_addr             : std_logic_vector(47 DOWNTO 0);
+  SIGNAL tcp_ipv4_addr            : std_logic_vector(31 DOWNTO 0);
+  SIGNAL tcp_ipv6_addr            : std_logic_vector(127 DOWNTO 0);
+  SIGNAL tcp_subnet_mask          : std_logic_vector(31 DOWNTO 0);
+  SIGNAL tcp_gateway_ip_addr      : std_logic_vector(31 DOWNTO 0);
   SIGNAL connection_reset_i       : std_logic_vector((NTCPSTREAMS-1) DOWNTO 0);
   SIGNAL tcp_tx_data_valid_i      : std_logic_vector((NTCPSTREAMS-1) DOWNTO 0);
   --
@@ -281,6 +293,7 @@ ARCHITECTURE wrapper OF gig_eth IS
   SIGNAL tcp_tx_cts_vector        : std_logic_vector((NTCPSTREAMS-1) DOWNTO 0);
   --
   SIGNAL rx_fifo_full             : std_logic;
+  SIGNAL rx_fifo_fullm3           : std_logic;
   SIGNAL tx_fifo_dout             : std_logic_vector(7 DOWNTO 0);
   SIGNAL tx_fifo_rden             : std_logic;
   SIGNAL tx_fifo_empty            : std_logic;
@@ -330,6 +343,16 @@ BEGIN
   ---------------------------------------------> EMAC
 
   ---------------------------------------------< tcp_server
+  PROCESS (CLK125) IS
+  BEGIN  -- Make configurations synchronous to CLK125
+    IF rising_edge(CLK125) THEN
+      tcp_mac_addr        <= MAC_ADDR;
+      tcp_ipv4_addr       <= IPv4_ADDR;
+      tcp_ipv6_addr       <= IPv6_ADDR;
+      tcp_subnet_mask     <= SUBNET_MASK;
+      tcp_gateway_ip_addr <= GATEWAY_IP_ADDR;
+    END IF;
+  END PROCESS;
   tcp_rx_data          <= tcp_rx_data_slv8x(0);
   tcp_tx_data_slv8x(0) <= tcp_tx_data;
   tcp_tx_cts           <= tcp_tx_cts_vector(0);
@@ -362,11 +385,11 @@ BEGIN
       --//-- CONFIGURATION
       -- configuration signals are synchonous with CLK
       -- Synchronous with CLK clock.
-      MAC_ADDR        => x"00183e010f00",
-      IPv4_ADDR       => x"c0a80202",
-      IPv6_ADDR       => (OTHERS => '0'),
-      SUBNET_MASK     => x"ffffff00",
-      GATEWAY_IP_ADDR => x"c0a80201",
+      MAC_ADDR        => tcp_mac_addr,
+      IPv4_ADDR       => tcp_ipv4_addr,
+      IPv6_ADDR       => tcp_ipv6_addr,
+      SUBNET_MASK     => tcp_subnet_mask,
+      GATEWAY_IP_ADDR => tcp_gateway_ip_addr,
       -- local IP address. 4 bytes for IPv4, 16 bytes for IPv6
       -- Natural order (MSB) 172.16.1.128 (LSB) as transmitted in the IP frame.
 
@@ -460,19 +483,26 @@ BEGIN
       TP      => OPEN
     );
   ---------------------------------------------> tcp_server
+
+  -- Must have programmable full with single-threshold of 61
+  -- out of total write-depth 64.
+  -- When RX_CTS is low, the Server continues to drive out 3 more bytes of data
+  -- (observed with ILA).  The fifo must be able to accept them, hence the use
+  -- of prog_full.
   rx_fifo_inst : fifo8to32
     PORT MAP (
-      rst    => RESET,
-      wr_clk => CLK125,
-      rd_clk => RX_FIFO_RDCLK,
-      din    => tcp_rx_data,
-      wr_en  => tcp_rx_data_valid,
-      rd_en  => RX_FIFO_RDEN,
-      dout   => RX_FIFO_Q,
-      full   => rx_fifo_full,
-      empty  => RX_FIFO_EMPTY
+      rst       => RESET,
+      wr_clk    => CLK125,
+      rd_clk    => RX_FIFO_RDCLK,
+      din       => tcp_rx_data,
+      wr_en     => tcp_rx_data_valid,
+      rd_en     => RX_FIFO_RDEN,
+      dout      => RX_FIFO_Q,
+      full      => rx_fifo_full,
+      prog_full => rx_fifo_fullm3,      -- asserted at (full-3) writes     
+      empty     => RX_FIFO_EMPTY
     );
-  tcp_rx_cts <= (NOT rx_fifo_full) WHEN TCP_USE_FIFO = '1' ELSE
+  tcp_rx_cts <= (NOT rx_fifo_fullm3) WHEN TCP_USE_FIFO = '1' ELSE
                 RX_TREADY;
   RX_TDATA  <= tcp_rx_data;
   RX_TVALID <= tcp_rx_data_valid;
