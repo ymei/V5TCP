@@ -545,8 +545,8 @@ int tm_digital_read(int sockfd, size_t nframemax, FILE *fp)
 
         nb = 0;
         while(nb < NBASK) {
-            /* read data fifo back */
-            ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(uint32_t));
+            /* read data fifo back, return will be n(written) + 1 words */
+            ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(uint32_t)-1);
             n = query_response(sockfd, buf, ncmd, NULL, 0);
 
             readTotal = 0;
