@@ -526,7 +526,7 @@ int configure_adc(int sockfd, char *buf, int opt)
         n = query_response(sockfd, buf, n, buf, 0);
         Sleep(2);
         /* read fifo96 */
-        n = cmd_read_datafifo(&buf32, sampleBytes/sizeof(int32_t));
+        n = cmd_read_datafifo(&buf32, sampleBytes/sizeof(int32_t)-1);
         n = query_response(sockfd, buf, n, buf, sampleBytes);
 
         for(i=0; i<sampleBytes-12; i+=12) {
@@ -686,8 +686,8 @@ int genesys_read_save(int sockfd)
     n = cmd_send_pulse(&buf32, 0x100); /* pulse_reg(8) */
     n = query_response(sockfd, buf, n, buf, 0); Sleep(20);
 
-    /* read data fifo back */
-    ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(int32_t));
+    /* read data fifo back, return will be n(written) + 1 words */
+    ncmd = cmd_read_datafifo(&buf32, NBASK/sizeof(int32_t)-1);
 
     iP = 0;
     nb = 0;
