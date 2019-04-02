@@ -1,21 +1,21 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
+-- Company:
+-- Engineer:
+--
 -- Create Date:    19:32:46 06/22/2015
--- Design Name: 
--- Module Name:    ads5282_interface - Behavioral 
--- Project Name: 
+-- Design Name:
+-- Module Name:    ads5282_interface - Behavioral
+-- Project Name:
 -- Target Devices: Virtex5
--- Tool versions: 
+-- Tool versions:
 -- Description:    Interface to ADC5282: 8ch 12bit ADC.  Samples DDR data on
 --                 each edge separately with ISERDES then combine.
 --
--- Dependencies: 
+-- Dependencies:
 --
--- Revision: 
+-- Revision:
 -- Revision 0.01 - File Created
--- Additional Comments: 
+-- Additional Comments:
 --
 ----------------------------------------------------------------------------------
 LIBRARY ieee;
@@ -69,7 +69,7 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
     GENERIC (
       WIDTH   : positive := 24;           -- parallel data width
       CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
-    );    
+    );
     PORT(
       CLK   : IN  std_logic;
       RESET : IN  std_logic;
@@ -79,18 +79,6 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
       SCLK  : OUT std_logic;
       DOUT  : OUT std_logic;
       SYNCn : OUT std_logic
-    );
-  END COMPONENT;
-  --
-  COMPONENT edge_sync
-    GENERIC (
-      EDGE : std_logic := '1'  -- '1'  :  rising edge,  '0' falling edge
-    );
-    PORT (
-      RESET : IN  std_logic;
-      CLK   : IN  std_logic;
-      EI    : IN  std_logic;
-      SO    : OUT std_logic
     );
   END COMPONENT;
   --
@@ -124,7 +112,7 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
       EMPTY : OUT std_logic
     );
   END COMPONENT;
-  
+
   SIGNAL adcLCLK               : std_logic;  -- adjusted LCLK inside of FPGA fabric
   SIGNAL adcLCLKb              : std_logic;
   SIGNAL adcLCLK_int           : std_logic;
@@ -139,6 +127,7 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
   SIGNAL lclkIodelayCtrlBusy   : std_logic;
   SIGNAL bufrRST               : std_logic;
   SIGNAL bufrCLR               : std_logic;
+  SIGNAL bufrBusy              : std_logic;
   --
   SIGNAL adcInDataP            : std_logic_vector(ADC_NCH-1 DOWNTO 0);
   SIGNAL adcDelayedDataP       : std_logic_vector(ADC_NCH-1 DOWNTO 0);
@@ -190,10 +179,13 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
   CONSTANT lclkIodelayCtrlAddr : std_logic_vector(CONFIG'length-CTRL_DATA_WIDTH-1 DOWNTO 0) := (CONFIG'length-CTRL_DATA_WIDTH-1 => '0', 0 => '0', OTHERS => '1');
   SIGNAL configFIFOout         : std_logic_vector(CONFIG'length-1 DOWNTO 0);
   SIGNAL configFIFOempty       : std_logic;
-  SIGNAL configFIFOvalid       : std_logic;
   SIGNAL configFIFOwrEn        : std_logic;
   SIGNAL configFIFOrdEn        : std_logic;
+  SIGNAL configStart           : std_logic;
   SIGNAL configBusy            : std_logic;
+  --
+  TYPE ctrlState_t IS (S0, S1, S2, S3);
+  SIGNAL ctrlState             : ctrlState_t;
 
 BEGIN
 
@@ -222,10 +214,9 @@ BEGIN
       configFIFOwrEn <= '0';
     END IF;
   END PROCESS;
-  configFIFOvalid <= NOT configFIFOempty;
   -- congregate busy signals
   configBusy_gen : PROCESS (lclkIodelayCtrlBusy, dataPIodelayCtrlBusy, bitSlipPCtrlBusy,
-                            bufrCLR, serialBusy, dataNIodelayCtrlBusy, bitSlipNCtrlBusy) IS
+                            bufrBusy, serialBusy, dataNIodelayCtrlBusy, bitSlipNCtrlBusy) IS
     VARIABLE p : std_logic;
   BEGIN
     p := '0';
@@ -233,41 +224,57 @@ BEGIN
       p := p OR dataPIodelayCtrlBusy(iCh) OR bitSlipPCtrlBusy(iCh)
              OR dataNIodelayCtrlBusy(iCh) OR bitSlipNCtrlBusy(iCh);
     END LOOP;  -- iCh
-    configBusy <= p OR lclkIodelayCtrlBusy OR bufrCLR OR serialBusy;
+    configBusy <= p OR lclkIodelayCtrlBusy OR bufrBusy OR serialBusy;
   END PROCESS;
-  -- capture the falling edge of configBusy to advance a FIFO read
-  configBusy_fall_es : PROCESS (CLK, configBusy) IS
+  -- Generate configStart to initiate config and advance a FIFO read
+  configStart_proc : PROCESS (CLK, RESET, configBusy) IS
     VARIABLE prev : std_logic;
   BEGIN
-    IF rising_edge(CLK) THEN
-      prev := configBusy;
-    END IF;
-    IF prev = '1' AND configBusy = '0' THEN
-      configFIFOrdEn <= '1';
-    ELSE
+    IF RESET = '1' THEN
+      ctrlState <= S0;
+    ELSIF rising_edge(CLK) THEN
+      configStart    <= '0';
       configFIFOrdEn <= '0';
+      CASE ctrlState IS
+        WHEN S0 =>
+          IF configFIFOempty = '0' AND configBusy = '0' THEN
+              configStart <= '1';
+              ctrlState <= S1;
+          END IF;
+        WHEN S1 =>
+              ctrlState <= S2;
+        WHEN S2 =>
+          IF configBusy = '0' THEN
+            configFIFOrdEn <= '1';
+            ctrlState      <= S3;
+          END IF;
+        WHEN S3 =>
+          ctrlState <= S0;
+        WHEN OTHERS =>
+          ctrlState <= S0;
+      END CASE;
     END IF;
   END PROCESS;
-  -- mux configFIFOvalid to start pulse signals
+  -- mux configStart to start pulse signals
   configAddr           <= configFIFOout(CONFIG'length-1 DOWNTO CTRL_DATA_WIDTH);
   --
-  serialStart          <= configFIFOvalid WHEN configFIFOout(CONFIG'length-1) = '1' ELSE '0';
-  bufrRST              <= configFIFOvalid WHEN configAddr = bufrRSTAddr             ELSE '0';
-  lclkIodelayCtrlStart <= configFIFOvalid WHEN configAddr = lclkIodelayCtrlAddr     ELSE '0';
+  serialStart          <= configStart WHEN configFIFOout(CONFIG'length-1) = '1' ELSE '0';
+  bufrRST              <= configStart WHEN configAddr = bufrRSTAddr             ELSE '0';
+  lclkIodelayCtrlStart <= configStart WHEN configAddr = lclkIodelayCtrlAddr     ELSE '0';
   lclkIodelayCtrlPW    <= configFIFOout(CTRL_DATA_WIDTH-1 DOWNTO 0);
-  
+
   config_mux : FOR iCh IN 0 TO ADC_NCH-1 GENERATE
-    dataPIodelayCtrlStart(iCh) <= configFIFOvalid WHEN configAddr = std_logic_vector(to_unsigned(iCh,    CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
-    dataNIodelayCtrlStart(iCh) <= configFIFOvalid WHEN configAddr = std_logic_vector(to_unsigned(iCh+8,  CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
-    bitSlipPCtrlStart(iCh)     <= configFIFOvalid WHEN configAddr = std_logic_vector(to_unsigned(iCh+16, CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
-    bitSlipNCtrlStart(iCh)     <= configFIFOvalid WHEN configAddr = std_logic_vector(to_unsigned(iCh+24, CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
+    dataPIodelayCtrlStart(iCh) <= configStart WHEN configAddr = std_logic_vector(to_unsigned(iCh,    CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
+    dataNIodelayCtrlStart(iCh) <= configStart WHEN configAddr = std_logic_vector(to_unsigned(iCh+8,  CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
+    bitSlipPCtrlStart(iCh)     <= configStart WHEN configAddr = std_logic_vector(to_unsigned(iCh+16, CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
+    bitSlipNCtrlStart(iCh)     <= configStart WHEN configAddr = std_logic_vector(to_unsigned(iCh+24, CONFIG'length-CTRL_DATA_WIDTH)) ELSE '0';
     --
     dataPIodelayCtrlPW(iCh) <= configFIFOout(CTRL_DATA_WIDTH-1 DOWNTO 0);
     dataNIodelayCtrlPW(iCh) <= configFIFOout(CTRL_DATA_WIDTH-1 DOWNTO 0);
     bitSlipPCtrlPW(iCh)     <= configFIFOout(CTRL_DATA_WIDTH-1 DOWNTO 0);
     bitSlipNCtrlPW(iCh)     <= configFIFOout(CTRL_DATA_WIDTH-1 DOWNTO 0);
   END GENERATE;
-  
+
   -- serial interface
   serialStart_rise_es : PROCESS (CLK, serialStart) IS
     VARIABLE prev : std_logic;
@@ -302,7 +309,7 @@ BEGIN
   -- ADCLK directly from the ADC
   adclk_ext_ibufds_inst : IBUFGDS
     GENERIC MAP (
-      DIFF_TERM  => TRUE,               -- Differential Termination 
+      DIFF_TERM  => TRUE,               -- Differential Termination
       IOSTANDARD => "DEFAULT"
     )
     PORT MAP (
@@ -314,7 +321,7 @@ BEGIN
   -- idelay the bit clock
   lclk_ibufds_inst : IBUFGDS
     GENERIC MAP (
-      DIFF_TERM  => TRUE,               -- Differential Termination 
+      DIFF_TERM  => TRUE,               -- Differential Termination
       IOSTANDARD => "DEFAULT"
     )
     PORT MAP (
@@ -328,7 +335,7 @@ BEGIN
         -- "I"=IDATAIN, "O"=ODATAIN, "DATAIN"=DATAIN, "IO"=Bi-directional
         HIGH_PERFORMANCE_MODE => TRUE, -- TRUE specifies lower jitter
         -- at expense of more power
-        IDELAY_TYPE           => "VARIABLE",  -- "FIXED" or "VARIABLE" 
+        IDELAY_TYPE           => "VARIABLE",  -- "FIXED" or "VARIABLE"
         IDELAY_VALUE          => 0,     -- 0 to 63 tap values
         ODELAY_VALUE          => 0,     -- 0 to 63 tap values
         REFCLK_FREQUENCY      => 200.0,   -- Frequency used for IDELAYCTRL
@@ -354,7 +361,7 @@ BEGIN
   -- reconstruct the frame clock from bit clock
   lclk_bufr_inst : BUFR
     GENERIC MAP (
-      BUFR_DIVIDE => "6",  -- "BYPASS", "1", "2", "3", "4", "5", "6", "7", "8" 
+      BUFR_DIVIDE => "6",  -- "BYPASS", "1", "2", "3", "4", "5", "6", "7", "8"
       SIM_DEVICE  => "VIRTEX5"          -- Specify target device
     )
     PORT MAP (
@@ -364,15 +371,14 @@ BEGIN
       I   => adcLCLK_int1               -- Clock buffer input
     );
   -- synchronize the phase of reconstructed frame clock to ADC's original frame clock
-  adclk_ext_bufr_es_inst : edge_sync
-    GENERIC MAP (
-      EDGE => '1'  -- '1'  :  rising edge,  '0' falling edge
-    )
+  adclk_ext_bufr_pp_inst : pulse2pulse
     PORT MAP (
-      RESET => '0',
-      CLK   => adclk_ext,
-      EI    => bufrRST,
-      SO    => bufrCLR
+      IN_CLK   => CLK,
+      OUT_CLK  => adclk_ext,
+      RST      => RESET,
+      PULSEIN  => bufrRST,
+      INBUSY   => bufrBusy,
+      PULSEOUT => bufrCLR
     );
   --
   ADCLK    <= adclk_rec;
@@ -400,7 +406,7 @@ BEGIN
   data_iserdes_iodelay_insts : FOR iCh IN 0 TO ADC_NCH-1 GENERATE
     data_ibufds_diff_out_inst : IBUFDS_DIFF_OUT
     GENERIC MAP (
-      DIFF_TERM  => TRUE,               -- Differential Termination 
+      DIFF_TERM  => TRUE,               -- Differential Termination
       IOSTANDARD => "DEFAULT"
     )
     PORT MAP (
@@ -416,7 +422,7 @@ BEGIN
         -- "I"=IDATAIN, "O"=ODATAIN, "DATAIN"=DATAIN, "IO"=Bi-directional
         HIGH_PERFORMANCE_MODE => TRUE,  -- TRUE specifies lower jitter
         -- at expense of more power
-        IDELAY_TYPE           => "VARIABLE",  -- "FIXED" or "VARIABLE" 
+        IDELAY_TYPE           => "VARIABLE",  -- "FIXED" or "VARIABLE"
         IDELAY_VALUE          => 0,     -- 0 to 63 tap values
         ODELAY_VALUE          => 0,     -- 0 to 63 tap values
         REFCLK_FREQUENCY      => 200.0,  -- Frequency used for IDELAYCTRL
@@ -458,7 +464,7 @@ BEGIN
         -- "I"=IDATAIN, "O"=ODATAIN, "DATAIN"=DATAIN, "IO"=Bi-directional
         HIGH_PERFORMANCE_MODE => TRUE,  -- TRUE specifies lower jitter
         -- at expense of more power
-        IDELAY_TYPE           => "VARIABLE",  -- "FIXED" or "VARIABLE" 
+        IDELAY_TYPE           => "VARIABLE",  -- "FIXED" or "VARIABLE"
         IDELAY_VALUE          => 0,     -- 0 to 63 tap values
         ODELAY_VALUE          => 0,     -- 0 to 63 tap values
         REFCLK_FREQUENCY      => 200.0,  -- Frequency used for IDELAYCTRL
@@ -497,14 +503,14 @@ BEGIN
     datap_iserdes_nodelay_inst : ISERDES_NODELAY
       GENERIC MAP (
         BITSLIP_ENABLE => TRUE,         -- TRUE/FALSE to enable bitslip controller
-        --   Must be "FALSE" when interface type is "MEMORY" 
-        DATA_RATE      => "SDR",        -- Specify data rate of "DDR" or "SDR" 
-        DATA_WIDTH     => 6,            -- Specify data width - 
+        --   Must be "FALSE" when interface type is "MEMORY"
+        DATA_RATE      => "SDR",        -- Specify data rate of "DDR" or "SDR"
+        DATA_WIDTH     => 6,            -- Specify data width -
         --  NETWORKING SDR: 2, 3, 4, 5, 6, 7, 8 : DDR 4, 6, 8, 10
         --  MEMORY SDR N/A : DDR 4
-        INTERFACE_TYPE => "NETWORKING",  -- Use model - "MEMORY" or "NETWORKING" 
+        INTERFACE_TYPE => "NETWORKING",  -- Use model - "MEMORY" or "NETWORKING"
         NUM_CE         => 1,  -- Define number or clock enables to an integer of 1 or 2
-        SERDES_MODE    => "MASTER"  --Set SERDES mode to "MASTER" or "SLAVE" 
+        SERDES_MODE    => "MASTER"  --Set SERDES mode to "MASTER" or "SLAVE"
       )
       PORT MAP (
         Q1        => Q1p(iCh),             -- 1-bit registered SERDES output
@@ -547,14 +553,14 @@ BEGIN
     datan_iserdes_nodelay_inst : ISERDES_NODELAY
       GENERIC MAP (
         BITSLIP_ENABLE => TRUE,         -- TRUE/FALSE to enable bitslip controller
-        --   Must be "FALSE" when interface type is "MEMORY" 
-        DATA_RATE      => "SDR",        -- Specify data rate of "DDR" or "SDR" 
-        DATA_WIDTH     => 6,            -- Specify data width - 
+        --   Must be "FALSE" when interface type is "MEMORY"
+        DATA_RATE      => "SDR",        -- Specify data rate of "DDR" or "SDR"
+        DATA_WIDTH     => 6,            -- Specify data width -
         --  NETWORKING SDR: 2, 3, 4, 5, 6, 7, 8 : DDR 4, 6, 8, 10
         --  MEMORY SDR N/A : DDR 4
-        INTERFACE_TYPE => "NETWORKING",  -- Use model - "MEMORY" or "NETWORKING" 
+        INTERFACE_TYPE => "NETWORKING",  -- Use model - "MEMORY" or "NETWORKING"
         NUM_CE         => 1,  -- Define number or clock enables to an integer of 1 or 2
-        SERDES_MODE    => "MASTER"  --Set SERDES mode to "MASTER" or "SLAVE" 
+        SERDES_MODE    => "MASTER"  --Set SERDES mode to "MASTER" or "SLAVE"
       )
       PORT MAP (
         Q1        => Q1n(iCh),          -- 1-bit registered SERDES output

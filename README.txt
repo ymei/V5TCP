@@ -34,7 +34,7 @@ MIG:
     load ddr2_mig.ucf
 
     For this SODIMM unit (MT4HTF3264HY-667), it can be set to 3000ps (333MHz)
-    and CAS Latency = 5.  Actual unit came with Genesys contains Samsung K4T51163QJ-BCE7 
+    and CAS Latency = 5.  Actual unit came with Genesys contains Samsung K4T51163QJ-BCE7
 
     Replace the original unit with M470T6554CZ3-CD5 (512MB, 32Meg x 16
     DDR2-533, CAS L = 4).  It seems to work although the MIG is configured

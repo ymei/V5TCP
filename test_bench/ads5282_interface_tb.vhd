@@ -1,42 +1,42 @@
 --------------------------------------------------------------------------------
--- Company: 
+-- Company:
 -- Engineer:
 --
 -- Create Date:   03:59:37 06/26/2015
--- Design Name:   
+-- Design Name:
 -- Module Name:   ads5282_interface_tb.vhd
 -- Project Name:  V5TCP
--- Target Device:  
--- Tool versions:  
--- Description:   
--- 
+-- Target Device:
+-- Tool versions:
+-- Description:
+--
 -- VHDL Test Bench Created by ISE for module: ads5282_interface
--- 
+--
 -- Dependencies:
--- 
+--
 -- Revision:
 -- Revision 0.01 - File Created
 -- Additional Comments:
 --
--- Notes: 
+-- Notes:
 -- This testbench has been automatically generated using types std_logic and
 -- std_logic_vector for the ports of the unit under test.  Xilinx recommends
 -- that these types always be used for the top-level I/O of a design in order
--- to guarantee that the testbench will bind correctly to the post-implementation 
+-- to guarantee that the testbench will bind correctly to the post-implementation
 -- simulation model.
 --------------------------------------------------------------------------------
 LIBRARY ieee;
 USE ieee.std_logic_1164.ALL;
- 
+
 -- Uncomment the following library declaration if using
 -- arithmetic functions with Signed or Unsigned values
 USE ieee.numeric_std.ALL;
- 
+
 ENTITY ads5282_interface_tb IS
 END ads5282_interface_tb;
 
 USE work.common_pkg.ALL;
- 
+
 ARCHITECTURE behavior OF ads5282_interface_tb IS
 
   -- Component Declaration for the Unit Under Test (UUT)
@@ -61,7 +61,6 @@ ARCHITECTURE behavior OF ads5282_interface_tb IS
       CSn     : OUT std_logic
     );
   END COMPONENT;
-
 
   --Inputs
   SIGNAL RESET  : std_logic                     := '0';
@@ -146,7 +145,7 @@ BEGIN
     WAIT FOR LCLK_period/2;
     DATAp <= (OTHERS => '1');
     DATAn <= (OTHERS => '0');
-    WAIT FOR LCLK_period/2;    
+    WAIT FOR LCLK_period/2;
     DATAp <= (OTHERS => '1');
     DATAn <= (OTHERS => '0');
     WAIT FOR LCLK_period/2;
@@ -177,9 +176,45 @@ BEGIN
     WAIT FOR CLK_period*1;
     CONFPS <= '0';
     WAIT FOR CLK_period*20;
-    CONFIG <= x"00000403";              -- bitSlipP(0)
+    CONFIG <= x"00000601";              -- bitSlipP(0)
     CONFPS <= '1';
     WAIT FOR CLK_period*1;
+    CONFPS <= '0';
+    WAIT FOR CLK_period*1;
+    CONFIG <= x"00000642";              -- bitSlipP(0)
+    CONFPS <= '1';
+    WAIT FOR CLK_period*1;
+    CONFPS <= '0';
+    WAIT FOR CLK_period*1;
+    CONFIG <= x"00000683";              -- bitSlipP(0)
+    CONFPS <= '1';
+    WAIT FOR CLK_period*1;
+    CONFPS <= '0';
+    WAIT FOR CLK_period*1;
+    CONFIG <= x"000006c4";              -- bitSlipP(0)
+    CONFPS <= '1';
+    WAIT FOR CLK_period*1;
+    CONFPS <= '0';
+    WAIT FOR CLK_period*1;
+    CONFIG <= x"00000705";              -- bitSlipP(0)
+    CONFPS <= '1';
+    WAIT FOR CLK_period*1;
+    CONFPS <= '0';
+    WAIT FOR CLK_period*1;
+    CONFIG <= x"00000746";              -- bitSlipP(0)
+    CONFPS <= '1';
+    WAIT FOR CLK_period*1;
+    CONFPS <= '0';
+    WAIT FOR CLK_period*1;
+    CONFIG <= x"00000787";              -- bitSlipP(0)
+    CONFPS <= '1';
+    WAIT FOR CLK_period*1;
+    CONFPS <= '0';
+    WAIT FOR CLK_period*1;
+    CONFIG <= x"000007c8";              -- bitSlipP(0)
+    CONFPS <= '1';
+    WAIT FOR CLK_period*1;
+
     CONFPS <= '0';
     WAIT FOR CLK_period*1;
     CONFIG <= x"00000602";              -- bitSlipN(0)
