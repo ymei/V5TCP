@@ -1,23 +1,23 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
+-- Company:
+-- Engineer:
+--
 -- Create Date:    19:32:46 06/26/2015
--- Design Name: 
--- Module Name:    width_pulse_sync - Behavioral 
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
+-- Design Name:
+-- Module Name:    width_pulse_sync - Behavioral
+-- Project Name:
+-- Target Devices:
+-- Tool versions:
 -- Description:    Produce a pulse of specified width in a different clock domain
 --                 Following a 1-clk wide reset pulse.
 --                 Ideally suited to change iodelay taps and iserdes bitslip
 --                 MODE := 0   output one pulse of duration PW
 --                      := 1   a train of 1-clk wide pulses (of number PW)
--- Dependencies: 
+-- Dependencies:
 --
--- Revision: 
+-- Revision:
 -- Revision 0.01 - File Created
--- Additional Comments: 
+-- Additional Comments:
 --
 ----------------------------------------------------------------------------------
 LIBRARY ieee;
@@ -55,7 +55,7 @@ ARCHITECTURE Behavioral OF width_pulse_sync IS
 
   SIGNAL prev       : std_logic;
   SIGNAL prevb      : std_logic;
-  SIGNAL prevb1     : std_logic;  
+  SIGNAL prevb1     : std_logic;
   SIGNAL prevo      : std_logic;
   SIGNAL prevo1     : std_logic;
   SIGNAL busy_buf   : std_logic;
@@ -85,16 +85,23 @@ BEGIN
       -- Capture the falling edge of busy_bufo
       IF (prevb = '0' AND prevb1 = '1') THEN
         busy_buf <= '0';
-      END IF;      
+      END IF;
     END IF;
   END PROCESS;
   BUSY <= busy_buf;
 
   -- output clock domain
-  PROCESS (CLKO) IS
+  PROCESS (CLKO, RESET) IS
     VARIABLE counter : unsigned(DATA_WIDTH DOWNTO 0);
   BEGIN
-    IF rising_edge(CLKO) THEN
+    IF RESET = '1' THEN
+      counter   := (OTHERS => '1');
+      prevo     <= '0';
+      prevo1    <= '0';
+      busy_bufo <= '0';
+      po_buf    <= '0';
+      RSTO      <= '0';
+    ELSIF rising_edge(CLKO) THEN
       prevo     <= busy_buf;
       prevo1    <= prevo;
       busy_bufo <= '0';
@@ -119,6 +126,8 @@ BEGIN
           END IF;
           po_buf <= NOT po_buf;
         END IF;
+      ELSE
+        counter := (OTHERS => '1');
       END IF;
     END IF;
   END PROCESS;

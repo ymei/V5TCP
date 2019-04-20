@@ -166,11 +166,11 @@ INST "*client_side_FIFO_emac0?rx_fifo_i?rd_store_frame_tog"    TNM = "rx_metasta
 
 TIMESPEC "ts_rx_meta_protect_0" = FROM "rx_metastable_0" 5 ns;
 
-# Area constaint to place example design near embedded TEMAC. Constraint is 
+# Area constaint to place example design near embedded TEMAC. Constraint is
 # optional and not necessary for a successful implementation of the design.
 INST "*emac_inst/v5_emac_ll/*" AREA_GROUP = AG_v5_emac ;
 AREA_GROUP "AG_v5_emac" RANGE = CLOCKREGION_X1Y2,CLOCKREGION_X1Y3 ;
- 
+
 ##################################
 # top Level constraints
 ##################################
@@ -317,26 +317,26 @@ NET "VHDCI1N<18>" LOC = "U31";  # BANK = 11, Pin name = IO_L19N_SM9N_11,     Sch
 NET "VHDCI1N<19>" LOC = "T34";  # BANK = 11, Pin name = IO_L18N_SM10N_11,    Sch name = EXP-IO20_N
 
 #VHDCI_2
-NET "VHDCI2P<0>"  LOC = "W34";   # BANK = 13, Pin name = IO_L1P_SM7P_13,    Sch name = EXP-IO21_P 
-NET "VHDCI2P<1>"  LOC = "V32";   # BANK = 13, Pin name = IO_L0P_SM8P_13,    Sch name = EXP-IO22_P 
-NET "VHDCI2P<2>"  LOC = "AA34";  # BANK = 13, Pin name = IO_L3P_SM5P_13,    Sch name = EXP-IO23_P 
-NET "VHDCI2P<3>"  LOC = "Y33";   # BANK = 13, Pin name = IO_L2P_SM6P_13,    Sch name = EXP-IO24_P 
-NET "VHDCI2P<4>"  LOC = "AC33";  # BANK = 13, Pin name = IO_L7P_SM2P_13,    Sch name = EXP-IO25_P 
-NET "VHDCI2P<5>"  LOC = "Y32";   # BANK = 13, Pin name = IO_L4P_13,         Sch name = EXP-IO26_P 
-NET "VHDCI2P<6>"  LOC = "AC34";  # BANK = 13, Pin name = IO_L5P_SM4P_13,    Sch name = EXP-IO27_P 
-NET "VHDCI2P<7>"  LOC = "AC32";  # BANK = 13, Pin name = IO_L6P_SM3P_13,    Sch name = EXP-IO28_P 
-NET "VHDCI2P<8>"  LOC = "AF34";  # BANK = 13, Pin name = IO_L9P_CC_SM0P_13, Sch name = EXP-IO29_P 
-NET "VHDCI2P<9>"  LOC = "AF33";  # BANK = 13, Pin name = IO_L8P_CC_SM1P_13, Sch name = EXP-IO30_P 
-NET "VHDCI2P<10>" LOC = "AG33";  # BANK = 13, Pin name = IO_L12P_VRN_13,    Sch name = EXP-IO31_P 
-NET "VHDCI2P<11>" LOC = "AH34";  # BANK = 13, Pin name = IO_L10P_CC_13,     Sch name = EXP-IO32_P 
-NET "VHDCI2P<12>" LOC = "AD32";  # BANK = 13, Pin name = IO_L11P_CC_13,     Sch name = EXP-IO33_P 
-NET "VHDCI2P<13>" LOC = "AK34";  # BANK = 13, Pin name = IO_L13P_13,        Sch name = EXP-IO34_P 
-NET "VHDCI2P<14>" LOC = "AG32";  # BANK = 13, Pin name = IO_L14P_13,        Sch name = EXP-IO35_P 
-NET "VHDCI2P<15>" LOC = "AM33";  # BANK = 13, Pin name = IO_L17P_13,        Sch name = EXP-IO36_P 
-NET "VHDCI2P<16>" LOC = "AJ32";  # BANK = 13, Pin name = IO_L15P_13,        Sch name = EXP-IO37_P 
-NET "VHDCI2P<17>" LOC = "AN34";  # BANK = 13, Pin name = IO_L18P_13,        Sch name = EXP-IO38_P 
-NET "VHDCI2P<18>" LOC = "AL34";  # BANK = 13, Pin name = IO_L16P_13,        Sch name = EXP-IO39_P 
-NET "VHDCI2P<19>" LOC = "AN32";  # BANK = 13, Pin name = IO_L19P_13,        Sch name = EXP-IO40_P 
+NET "VHDCI2P<0>"  LOC = "W34";   # BANK = 13, Pin name = IO_L1P_SM7P_13,    Sch name = EXP-IO21_P
+NET "VHDCI2P<1>"  LOC = "V32";   # BANK = 13, Pin name = IO_L0P_SM8P_13,    Sch name = EXP-IO22_P
+NET "VHDCI2P<2>"  LOC = "AA34";  # BANK = 13, Pin name = IO_L3P_SM5P_13,    Sch name = EXP-IO23_P
+NET "VHDCI2P<3>"  LOC = "Y33";   # BANK = 13, Pin name = IO_L2P_SM6P_13,    Sch name = EXP-IO24_P
+NET "VHDCI2P<4>"  LOC = "AC33";  # BANK = 13, Pin name = IO_L7P_SM2P_13,    Sch name = EXP-IO25_P
+NET "VHDCI2P<5>"  LOC = "Y32";   # BANK = 13, Pin name = IO_L4P_13,         Sch name = EXP-IO26_P
+NET "VHDCI2P<6>"  LOC = "AC34";  # BANK = 13, Pin name = IO_L5P_SM4P_13,    Sch name = EXP-IO27_P
+NET "VHDCI2P<7>"  LOC = "AC32";  # BANK = 13, Pin name = IO_L6P_SM3P_13,    Sch name = EXP-IO28_P
+NET "VHDCI2P<8>"  LOC = "AF34";  # BANK = 13, Pin name = IO_L9P_CC_SM0P_13, Sch name = EXP-IO29_P
+NET "VHDCI2P<9>"  LOC = "AF33";  # BANK = 13, Pin name = IO_L8P_CC_SM1P_13, Sch name = EXP-IO30_P
+NET "VHDCI2P<10>" LOC = "AG33";  # BANK = 13, Pin name = IO_L12P_VRN_13,    Sch name = EXP-IO31_P
+NET "VHDCI2P<11>" LOC = "AH34";  # BANK = 13, Pin name = IO_L10P_CC_13,     Sch name = EXP-IO32_P
+NET "VHDCI2P<12>" LOC = "AD32";  # BANK = 13, Pin name = IO_L11P_CC_13,     Sch name = EXP-IO33_P
+NET "VHDCI2P<13>" LOC = "AK34";  # BANK = 13, Pin name = IO_L13P_13,        Sch name = EXP-IO34_P
+NET "VHDCI2P<14>" LOC = "AG32";  # BANK = 13, Pin name = IO_L14P_13,        Sch name = EXP-IO35_P
+NET "VHDCI2P<15>" LOC = "AM33";  # BANK = 13, Pin name = IO_L17P_13,        Sch name = EXP-IO36_P
+NET "VHDCI2P<16>" LOC = "AJ32";  # BANK = 13, Pin name = IO_L15P_13,        Sch name = EXP-IO37_P
+NET "VHDCI2P<17>" LOC = "AN34";  # BANK = 13, Pin name = IO_L18P_13,        Sch name = EXP-IO38_P
+NET "VHDCI2P<18>" LOC = "AL34";  # BANK = 13, Pin name = IO_L16P_13,        Sch name = EXP-IO39_P
+NET "VHDCI2P<19>" LOC = "AN32";  # BANK = 13, Pin name = IO_L19P_13,        Sch name = EXP-IO40_P
 
 NET "VHDCI2N<0>"  LOC = "V34";   # BANK = 13, Pin name = IO_L1N_SM7N_13,    Sch name = EXP-IO21_N
 NET "VHDCI2N<1>"  LOC = "V33";   # BANK = 13, Pin name = IO_L0N_SM8N_13,    Sch name = EXP-IO22_N
@@ -524,11 +524,11 @@ TIMESPEC "TS_MC_RDEN_SEL_MUX" = FROM "TNM_RDEN_SEL_MUX" TO FFS
 INST "*/u_phy_init/u_ff_phy_init_data_sel" TNM = "TNM_PHY_INIT_DATA_SEL";
 TIMESPEC "TS_MC_PHY_INIT_DATA_SEL_0" = FROM "TNM_PHY_INIT_DATA_SEL" TO FFS
 "TS_SYS_CLK" * 4;
-# The RAM path is only used in cases where Write Latency (Additive Latency + 
-# (CAS Latency - 1) + (1 in case of RDIMM)) is 2 or below. So these constraints are 
-# valid for CAS Latency = 3, Additive Latency = 0 and selected part is not RDIMM. 
-# If Write Latency is higher than 3, then a warning will appear in PAR, 
-# and the constraint can be ignored as this path does not exist. RAM constraint 
+# The RAM path is only used in cases where Write Latency (Additive Latency +
+# (CAS Latency - 1) + (1 in case of RDIMM)) is 2 or below. So these constraints are
+# valid for CAS Latency = 3, Additive Latency = 0 and selected part is not RDIMM.
+# If Write Latency is higher than 3, then a warning will appear in PAR,
+# and the constraint can be ignored as this path does not exist. RAM constraint
 # can be safely removed if the warning is not to be displayed.
 TIMESPEC "TS_MC_PHY_INIT_DATA_SEL_90" = FROM "TNM_PHY_INIT_DATA_SEL" TO RAMS
 "TS_SYS_CLK" * 4;
@@ -544,14 +544,14 @@ INST "*/u_phy_calib/gen_cal_rden_dly*.u_ff_cal_rden_dly"
   TNM = "TNM_CAL_RDEN_DLY";
 TIMESPEC "TS_MC_CAL_RDEN_DLY" = FROM "TNM_CAL_RDEN_DLY" TO FFS
 "TS_SYS_CLK" * 4;
-############################################################################### 
+###############################################################################
 #The following constraint is added to prevent (false) hold time violations on
-#the data path from stage1 to stage2 capture flops.  Stage1 flops are clocked by 
-#the delayed DQS and stage2 flops are clocked by the clk0 clock. Placing a TIG 
+#the data path from stage1 to stage2 capture flops.  Stage1 flops are clocked by
+#the delayed DQS and stage2 flops are clocked by the clk0 clock. Placing a TIG
 #on the DQ IDDR capture flop instance to achieve this is acceptable because timing
 #is guaranteed through the use of separate Predictable IP constraints. These
-#violations are reported when anunconstrained path report is run.	  
-############################################################################### 
+#violations are reported when anunconstrained path report is run.
+###############################################################################
 INST "*/gen_dq[*].u_iob_dq/gen*.u_iddr_dq" TIG ;
 ###############################################################################
 # DQS Read Post amble Glitch Squelch circuit related constraints
@@ -596,10 +596,10 @@ INST "*/gen_dqs[7].u_iob_dqs/u_iodelay_dq_ce"  LOC = "IODELAY_X0Y222";
 # calibrated out (when synchronizing this output to DQS), the delay
 # should still be kept as low as possible to reduce post-calibration
 # voltage/temp variations - these are roughly proportional to the
-# absolute delay of the path.                                    
-#	The following code has been commented for V5 as the predictable IP will take 
-#	care of placement of these flops by meeting the MAXDELAY requirement.  
-#	These constraints will be removed in the next release.  
+# absolute delay of the path.
+#	The following code has been commented for V5 as the predictable IP will take
+#	care of placement of these flops by meeting the MAXDELAY requirement.
+#	These constraints will be removed in the next release.
 ###############################################################################
 
 INST "*/u_phy_calib/gen_gate[0].u_en_dqs_ff"  LOC = SLICE_X0Y28;

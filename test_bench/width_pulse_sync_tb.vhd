@@ -1,40 +1,40 @@
 --------------------------------------------------------------------------------
--- Company: 
+-- Company:
 -- Engineer:
 --
 -- Create Date:   01:25:13 06/26/2015
--- Design Name:   
+-- Design Name:
 -- Module Name:   width_pulse_sync_tb.vhd
 -- Project Name:  V5TCP
--- Target Device:  
--- Tool versions:  
--- Description:   
--- 
+-- Target Device:
+-- Tool versions:
+-- Description:
+--
 -- VHDL Test Bench Created by ISE for module: width_pulse_sync
--- 
+--
 -- Dependencies:
--- 
+--
 -- Revision:
 -- Revision 0.01 - File Created
 -- Additional Comments:
 --
--- Notes: 
+-- Notes:
 -- This testbench has been automatically generated using types std_logic and
 -- std_logic_vector for the ports of the unit under test.  Xilinx recommends
 -- that these types always be used for the top-level I/O of a design in order
--- to guarantee that the testbench will bind correctly to the post-implementation 
+-- to guarantee that the testbench will bind correctly to the post-implementation
 -- simulation model.
 --------------------------------------------------------------------------------
 LIBRARY ieee;
 USE ieee.std_logic_1164.ALL;
- 
+
 -- Uncomment the following library declaration if using
 -- arithmetic functions with Signed or Unsigned values
 USE ieee.numeric_std.ALL;
- 
+
 ENTITY width_pulse_sync_tb IS
 END width_pulse_sync_tb;
- 
+
 ARCHITECTURE behavior OF width_pulse_sync_tb IS
 
   -- Component Declaration for the Unit Under Test (UUT)
@@ -115,7 +115,7 @@ BEGIN
     RESET <= '0';
     WAIT FOR CLK_period*10;
 
-    -- insert stimulus here 
+    -- insert stimulus here
     PW    <= std_logic_vector(to_unsigned(5,PW'length));
     START <= '1';
     WAIT FOR CLK_period*2;

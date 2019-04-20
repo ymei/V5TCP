@@ -4,20 +4,20 @@
 --
 -- Company: LBNL
 -- Engineer: Yuan Mei
--- 
--- Create Date:    02:00:18 08/23/2013 
+--
+-- Create Date:    02:00:18 08/23/2013
 -- Design Name:    V5TCP
--- Module Name:    top - Behavioral 
--- Project Name: 
+-- Module Name:    top - Behavioral
+-- Project Name:
 -- Target Devices: Virtex-5 xc5vlx50t-1ff1136
 -- Tool versions: ISE 14.7
--- Description: 
+-- Description:
 --
--- Dependencies: 
+-- Dependencies:
 --
--- Revision: 
+-- Revision:
 -- Revision 0.01 - File Created
--- Additional Comments: 
+-- Additional Comments:
 --
 --------------------------------------------------------------------------------
 LIBRARY ieee;
@@ -495,7 +495,7 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL gig_eth_gateway_ip_addr           : std_logic_vector(31 DOWNTO 0);
   SIGNAL gig_eth_tx_tdata                  : std_logic_vector(7 DOWNTO 0);
   SIGNAL gig_eth_tx_tvalid                 : std_logic;
-  SIGNAL gig_eth_tx_tready                 : std_logic;  
+  SIGNAL gig_eth_tx_tready                 : std_logic;
   SIGNAL gig_eth_rx_tdata                  : std_logic_vector(7 DOWNTO 0);
   SIGNAL gig_eth_rx_tvalid                 : std_logic;
   SIGNAL gig_eth_rx_tready                 : std_logic;
@@ -520,7 +520,7 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL cmd_fifo_q                        : std_logic_vector(35 DOWNTO 0);
   SIGNAL cmd_fifo_empty                    : std_logic;
   SIGNAL cmd_fifo_rdreq                    : std_logic;
-  -- thirtytwo 16bit registers  
+  -- thirtytwo 16bit registers
   SIGNAL config_reg                        : std_logic_vector(511 DOWNTO 0);
   -- 16bit pulse register
   SIGNAL pulse_reg                         : std_logic_vector(15 DOWNTO 0);
@@ -1236,5 +1236,5 @@ BEGIN
       I   => BTN(0),
       O   => cs_trig0(1)
     );
-  
+
 END Behavioral;

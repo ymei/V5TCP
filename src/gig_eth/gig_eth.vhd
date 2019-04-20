@@ -5,7 +5,7 @@
 -- (c) Copyright 2014 Yuan Mei. All rights reserved.
 -- -----------------------------------------------------------------------------
 -- Description:
---   Connect V5 EMAC TO TCP server COM5402 and package as a single module            
+--   Connect V5 EMAC TO TCP server COM5402 and package as a single module
 --------------------------------------------------------------------------------
 
 LIBRARY UNISIM;
@@ -105,7 +105,7 @@ ARCHITECTURE wrapper OF gig_eth IS
       CLK_FREQUENCY   : integer               := 125;
       -- CLK frequency in MHz. Needed to compute actual delays.
       TX_IDLE_TIMEOUT : integer RANGE 0 TO 50 := 50;
-      -- inactive input timeout, expressed in 4us units. -- 50*4us = 200us 
+      -- inactive input timeout, expressed in 4us units. -- 50*4us = 200us
       -- Controls the transmit stream segmentation: data in the elastic buffer will be transmitted if
       -- no input is received within TX_IDLE_TIMEOUT, without waiting for the transmit frame to be filled with MSS data bytes.
       SIMULATION      : std_logic             := '0'
@@ -147,13 +147,13 @@ ARCHITECTURE wrapper OF gig_eth IS
       MAC_TX_SOF        : OUT std_logic;
       -- start of frame: '1' when sending the first byte.
       MAC_TX_EOF        : OUT std_logic;
-      -- '1' when sending the last byte in a packet to be transmitted. 
+      -- '1' when sending the last byte in a packet to be transmitted.
       -- Aligned with MAC_TX_DATA_VALID
       MAC_TX_CTS        : IN  std_logic;
-      -- MAC-generated Clear To Send flow control signal, indicating room in the 
-      -- MAC tx elastic buffer for a complete maximum size frame 1518B. 
+      -- MAC-generated Clear To Send flow control signal, indicating room in the
+      -- MAC tx elastic buffer for a complete maximum size frame 1518B.
       -- The user should check that this signal is high before deciding to send
-      -- sending the next frame. 
+      -- sending the next frame.
       -- Note: MAC_TX_CTS may go low while the frame is transfered in. Ignore it as space is guaranteed
       -- at the start of frame.
 
@@ -166,10 +166,10 @@ ARCHITECTURE wrapper OF gig_eth IS
       MAC_RX_DATA_VALID : IN std_logic;
       -- data valid
       MAC_RX_SOF        : IN std_logic;
-      -- '1' when sending the first byte in a received packet. 
+      -- '1' when sending the first byte in a received packet.
       -- Aligned with MAC_RX_DATA_VALID
       MAC_RX_EOF        : IN std_logic;
-      -- '1' when sending the last byte in a received packet. 
+      -- '1' when sending the last byte in a received packet.
       -- Aligned with MAC_RX_DATA_VALID
 
       --//-- Application <- UDP rx
@@ -199,7 +199,7 @@ ARCHITECTURE wrapper OF gig_eth IS
       --//-- Application <- TCP rx
       -- NTCPSTREAMS can operate independently. Only one stream active at any given time.
       -- Data is pushed out. Limited flow-control here. Receipient must be able to accept data
-      -- at any time (in other words, it is the receipient's responsibility to have elastic 
+      -- at any time (in other words, it is the receipient's responsibility to have elastic
       -- buffer if needed).
       TCP_RX_DATA       : OUT SLV8xNTCPSTREAMStype;
       TCP_RX_DATA_VALID : OUT std_logic_vector((NTCPSTREAMS-1) DOWNTO 0);
@@ -213,7 +213,7 @@ ARCHITECTURE wrapper OF gig_eth IS
       TCP_TX_DATA       : IN  SLV8xNTCPSTREAMStype;
       TCP_TX_DATA_VALID : IN  std_logic_vector((NTCPSTREAMS-1) DOWNTO 0);
       TCP_TX_CTS        : OUT std_logic_vector((NTCPSTREAMS-1) DOWNTO 0);
-      -- Clear To Send = transmit flow control. 
+      -- Clear To Send = transmit flow control.
       -- App is responsible for checking the CTS signal before sending APP_DATA
 
       --//-- TEST POINTS, COMSCOPE TRACES
@@ -364,9 +364,9 @@ BEGIN
       CLK_FREQUENCY   => 125,
       -- CLK frequency in MHz. Needed to compute actual delays.
       TX_IDLE_TIMEOUT => 50,
-      -- inactive input timeout, expressed in 4us units. -- 50*4us = 200us 
+      -- inactive input timeout, expressed in 4us units. -- 50*4us = 200us
       -- Controls the transmit stream segmentation: data in the elastic buffer will be transmitted if
-      -- no input is received within TX_IDLE_TIMEOUT, without waiting for the transmit frame to be filled with MSS data bytes.       
+      -- no input is received within TX_IDLE_TIMEOUT, without waiting for the transmit frame to be filled with MSS data bytes.
       SIMULATION      => '0'
      -- 1 during simulation with Wireshark .cap file, '0' otherwise
      -- Wireshark many not be able to collect offloaded checksum computations.
@@ -404,15 +404,15 @@ BEGIN
       MAC_TX_DATA_VALID => emac_ll_tx_src_rdy,
       -- data valid
       MAC_TX_SOF        => emac_ll_tx_sof,
-      -- start of frame: '1' when sending the first byte.       
+      -- start of frame: '1' when sending the first byte.
       MAC_TX_EOF        => emac_ll_tx_eof,
-      -- '1' when sending the last byte in a packet to be transmitted. 
+      -- '1' when sending the last byte in a packet to be transmitted.
       -- Aligned with MAC_TX_DATA_VALID
       MAC_TX_CTS        => NOT emac_ll_tx_dst_rdy,
-      -- MAC-generated Clear To Send flow control signal, indicating room in the 
-      -- MAC tx elastic buffer for a complete maximum size frame 1518B. 
+      -- MAC-generated Clear To Send flow control signal, indicating room in the
+      -- MAC tx elastic buffer for a complete maximum size frame 1518B.
       -- The user should check that this signal is high before deciding to send
-      -- sending the next frame. 
+      -- sending the next frame.
       -- Note: MAC_TX_CTS may go low while the frame is transfered in. Ignore it as space is guaranteed
       -- at the start of frame.
 
@@ -425,10 +425,10 @@ BEGIN
       MAC_RX_DATA_VALID => NOT emac_ll_rx_src_rdy,
       -- data valid
       MAC_RX_SOF        => NOT emac_ll_rx_sof,
-      -- '1' when sending the first byte in a received packet. 
+      -- '1' when sending the first byte in a received packet.
       -- Aligned with MAC_RX_DATA_VALID
       MAC_RX_EOF        => NOT emac_ll_rx_eof,
-      -- '1' when sending the last byte in a received packet. 
+      -- '1' when sending the last byte in a received packet.
       -- Aligned with MAC_RX_DATA_VALID
 
       --//-- Application <- UDP rx
@@ -458,7 +458,7 @@ BEGIN
       --//-- Application <- TCP rx
       -- NTCPSTREAMS can operate independently. Only one stream active at any given time.
       -- Data is pushed out. Limited flow-control here. Receipient must be able to accept data
-      -- at any time (in other words, it is the receipient's responsibility to have elastic 
+      -- at any time (in other words, it is the receipient's responsibility to have elastic
       -- buffer if needed).
       TCP_RX_DATA       => tcp_rx_data_slv8x,
       TCP_RX_DATA_VALID => tcp_rx_data_valid_vector,
@@ -472,7 +472,7 @@ BEGIN
       TCP_TX_DATA       => tcp_tx_data_slv8x,
       TCP_TX_DATA_VALID => tcp_tx_data_valid_i,
       TCP_TX_CTS        => tcp_tx_cts_vector,
-      -- Clear To Send = transmit flow control. 
+      -- Clear To Send = transmit flow control.
       -- App is responsible for checking the CTS signal before sending APP_DATA
 
       --//-- TEST POINTS, COMSCOPE TRACES
@@ -499,7 +499,7 @@ BEGIN
       rd_en     => RX_FIFO_RDEN,
       dout      => RX_FIFO_Q,
       full      => rx_fifo_full,
-      prog_full => rx_fifo_fullm3,      -- asserted at (full-3) writes     
+      prog_full => rx_fifo_fullm3,      -- asserted at (full-3) writes
       empty     => RX_FIFO_EMPTY
     );
   tcp_rx_cts <= (NOT rx_fifo_fullm3) WHEN TCP_USE_FIFO = '1' ELSE
