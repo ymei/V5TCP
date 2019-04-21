@@ -85,7 +85,9 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
   COMPONENT width_pulse_sync
     GENERIC (
       DATA_WIDTH : positive := CTRL_DATA_WIDTH;
-      MODE       : natural
+      MODE       : natural;
+      RSTO_EN    : std_logic := '1';      -- RSTO output enable
+      DELAY_AFTER_RST : natural := 6      -- pulse starts () CLK after RSTO
     );
     PORT (
       RESET : IN  std_logic;

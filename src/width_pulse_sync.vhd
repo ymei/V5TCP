@@ -1,25 +1,16 @@
-----------------------------------------------------------------------------------
--- Company:
--- Engineer:
---
--- Create Date:    19:32:46 06/26/2015
--- Design Name:
--- Module Name:    width_pulse_sync - Behavioral
--- Project Name:
--- Target Devices:
--- Tool versions:
--- Description:    Produce a pulse of specified width in a different clock domain
---                 Following a 1-clk wide reset pulse.
---                 Ideally suited to change iodelay taps and iserdes bitslip
---                 MODE := 0   output one pulse of duration PW
---                      := 1   a train of 1-clk wide pulses (of number PW)
--- Dependencies:
---
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
---
-----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--! @file width_pulse_sync.vhd
+--! @brief Produce a pulse of specified width in a different clock domain.
+--! @author Yuan Mei
+--!
+--! Produce a pulse of specified width in a different clock domain
+--! following a 1-CLKO wide reset pulse (when RSTO_EN='1').
+--! Ideally suited to change iodelay taps and iserdes bitslip
+--!               MODE := 0   output one pulse of duration PW
+--!                    := 1   a train of 1-clk wide pulses (of number PW)
+--! DELAY_AFTER_RST sets the time after RSTO AND before PO.  1 is the minimum.
+--! PW = 0 will still generate RSTO but no PO.
+--------------------------------------------------------------------------------
 LIBRARY ieee;
 USE ieee.std_logic_1164.ALL;
 
@@ -35,8 +26,10 @@ USE UNISIM.VComponents.ALL;
 ENTITY width_pulse_sync IS
   GENERIC (
     DATA_WIDTH : positive := 6;
-    MODE       : natural  := 0          -- 0: output one pulse of duration PW
+    MODE       : natural  := 0;         -- 0: output one pulse of duration PW
                                         -- 1: a train of 1-clk wide pulses (of number PW)
+    RSTO_EN    : std_logic := '1';      -- RSTO output enable
+    DELAY_AFTER_RST : natural := 6      -- pulse starts () CLK after RSTO
   );
   PORT (
     RESET : IN  std_logic;
@@ -62,6 +55,7 @@ ARCHITECTURE Behavioral OF width_pulse_sync IS
   SIGNAL busy_bufo  : std_logic;
   SIGNAL pw_buf     : std_logic_vector(DATA_WIDTH-1 DOWNTO 0);
   SIGNAL po_buf     : std_logic;
+  SIGNAL rsto_buf   : std_logic;
 
 BEGIN
 
@@ -92,29 +86,35 @@ BEGIN
 
   -- output clock domain
   PROCESS (CLKO, RESET) IS
-    VARIABLE counter : unsigned(DATA_WIDTH DOWNTO 0);
+    VARIABLE counter, rcnt : unsigned(DATA_WIDTH DOWNTO 0);
   BEGIN
     IF RESET = '1' THEN
       counter   := (OTHERS => '1');
+      rcnt      := (0=>'1', OTHERS => '0');
       prevo     <= '0';
       prevo1    <= '0';
       busy_bufo <= '0';
       po_buf    <= '0';
-      RSTO      <= '0';
+      rsto_buf  <= '0';
     ELSIF rising_edge(CLKO) THEN
       prevo     <= busy_buf;
       prevo1    <= prevo;
       busy_bufo <= '0';
       po_buf    <= '0';
-      RSTO      <= '0';
+      rsto_buf  <= '0';
       -- Capture the rising edge of busy_buf
       IF (prevo1 = '0' AND prevo = '1') THEN
         busy_bufo <= '1';
         counter   := (OTHERS => '0');
-        RSTO      <= '1';
+        rcnt      := (0=>'1', OTHERS => '0');
+        rsto_buf  <= '1';
       ELSIF counter = 0 THEN
         busy_bufo <= '1';
-        counter   := counter + 1;
+        IF rcnt < to_unsigned(DELAY_AFTER_RST, rcnt'length) THEN
+          rcnt := rcnt + 1;
+        ELSE
+          counter := counter + 1;
+        END IF;
       ELSIF counter <= unsigned(pw_buf) THEN
         busy_bufo <= '1';
         IF MODE = 0 THEN
@@ -131,6 +131,6 @@ BEGIN
       END IF;
     END IF;
   END PROCESS;
-  PO <= po_buf;
-
+  PO   <= po_buf;
+  RSTO <= RESET OR (rsto_buf AND RSTO_EN);
 END Behavioral;

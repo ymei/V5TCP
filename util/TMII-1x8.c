@@ -1,7 +1,7 @@
 /** \file TMII-1x8
  * Control a 1x8 array of Topmetal-II- and read back the digitizer output
  *
- * Copyright (c) 2015, 2016
+ * Copyright (c) 2015 - 2019
  *
  *     Yuan Mei
  *
@@ -204,7 +204,7 @@ static int query_response_with_timeout(int sockfd, char *queryStr, size_t nbytes
             break;
         }
         if(nsel>0 && FD_ISSET(sockfd, &rfd)) {
-            nr = read(sockfd, respStr+ret, BUFSIZ-ret);
+            nr = read(sockfd, respStr+ret, nbytes_ret_exp-ret);
             // debug_printf("nr = %zd\n", nr);
             if(nr>0) {
                 ret += nr;
@@ -238,7 +238,7 @@ static void signal_kill_handler(int sig)
     printf("\nstart time = %zd\n", startTime);
     printf("stop time  = %zd\n", time(NULL));
     fflush(stdout);
-    
+
     error_printf("Killed, cleaning up...\n");
     atexit(atexit_flush_files);
     exit(EXIT_SUCCESS);
@@ -322,7 +322,7 @@ int configure_dac(int sockfd, char *buf)
                           config_param.csa_vref[5], config_param.csa_vref[7],config_param.arst_vref[5], config_param.arst_vref[7]};
     double ofmap[NTM] = {config_param.fe_off[0], config_param.fe_off[4], config_param.fe_off[1], config_param.fe_off[5],
                          config_param.fe_off[2], config_param.fe_off[6], config_param.fe_off[3], config_param.fe_off[7]};
-    
+
     buf32 = (uint32_t*)buf;
 
 #define DACVolt(x) ((uint16_t)((double)(x)/2.5 * 65536.0))
@@ -454,123 +454,260 @@ int configure_topmetal(int sockfd, char *buf)
     return 1;
 }
 
-int configure_adc(int sockfd, char *buf, int opt)
-{
+/** Write 32-bit wide code using two adjacent CONFIG_REG and one PULSE_REG.
+ * @param[in] raddr REG addr in control_interface.
+ * @param[in] paddr PULSE addr in control_interface.
+ */
 #define write32breg(raddr,paddr) do {                                   \
-        /* register addr and pulse addr */                              \
         n = cmd_write_register(&buf32, raddr, val & 0xffff);            \
         n = query_response(sockfd, buf, n, buf, 0);                     \
         n = cmd_write_register(&buf32, raddr+1, (val>>16) & 0xffff);    \
         n = query_response(sockfd, buf, n, buf, 0);                     \
         n = cmd_send_pulse(&buf32, (1<<paddr) & 0xffff);                \
         n = query_response(sockfd, buf, n, buf, 0);                     \
-    } while (0);
+    } while(0);
 
-    int df[8]={0};
-    uint16_t ds[8], da, db;
+/** Scan and set for best iodelay.
+ * ADS5282 by default sends 0x555 (6 ones in even positions) as PAT_DESKEW.
+ *
+ * Note that the firmware is set up such that the data is MSB first, and high channel ID first.
+ *
+ * A simple delay finding is implemented: delay value for
+ * every channel is the same, then the best delay point that is common
+ * to all channels is found.
+ */
+int adc_scan_iodelay(int sockfd, char *buf, size_t nch)
+{
+#define adcScanIodelayNCH 8
+#define adcScanIodelayTapN 64
+    const uint32_t raddr=adcScanIodelayNCH, paddr=2, fifoTrigpaddr=5;
+    const size_t nSample=1024;
+    const size_t nOnesExpected=nSample*6;
+    size_t n, nBytes=nSample*12;
+    int onesE[adcScanIodelayNCH]={0}, onesO[adcScanIodelayNCH]={0}, succDelay[adcScanIodelayTapN]={0};
+    int ret = 1;
+    uint16_t delay, ds[adcScanIodelayNCH], da, db;
     uint32_t *buf32, val;
-    size_t n, sampleBytes = 1024;
-    ssize_t i, j;
+    intptr_t i, j, k, iCh;
 
     buf32 = (uint32_t*)buf;
-    /* reset ads5282_interface module */
-    n = cmd_send_pulse(&buf32, (1<<3) & 0xffff);
-    n = query_response(sockfd, buf, n, buf, 0);
-    /* Select SPI Chip 3 */
-    n = cmd_write_register(&buf32, 11, 0x0003);
-    n = query_response(sockfd, buf, n, buf, 0);
-    Sleep(2);
-    /* serial data, low 24 bit is effective */
-    val = 0x80000000 | (0x00<<16) | 0x0001 ; /* RST */
-    write32breg(8,2); Sleep(2);
-    val = 0x80000000 | (0x42<<16) | 0x8041 ; /* differential clock and PHASE_DDR */
-    write32breg(8,2);
-    val = 0x80000000 | (0x11<<16) | 0x0444 ; /* drive strength */
-    write32breg(8,2);
-    val = 0x80000000 | (0x12<<16) | 0x4444 ; /* termination */
-    write32breg(8,2);
-    val = 0x80000000 | (0x25<<16) | 0x0000 ; /* 0x0040: EN_RAMP */
-    write32breg(8,2);
-    if(opt==1) {
-        val = 0x80000000 | (0x45<<16) | 0x0001 ; /* 0x0001: PAT_DESKEW, 0x0002: PAT_SYNC */
-        write32breg(8,2);
+
+    if(nch != adcScanIodelayNCH) {
+        error_printf("nch != %d is not supported.\n", adcScanIodelayNCH);
+        return 0;
     }
+    val = 0x80000000 | (0x45<<16) | 0x0001 ; /* 0x0001: PAT_DESKEW, 0x0002: PAT_SYNC */
+    write32breg(raddr,paddr);
+
+    /* data source to fifo96 */
+    n = cmd_write_register(&buf32, 10, 0x0000);
+    n = query_response(sockfd, buf, n, buf, 0);
+
     /* configAddr is high 26 bits, bufrRSTAddr = 0x7fffffc0, lclkIodelayCtrlAddr = 0x7fffff80 */
     /* low 6 bits set lclkIodelayCtrlPW */
     /* bufrRST */
     val = 0x7fffffc0;
-    write32breg(8,2);
-    /* iodelay, 0~63 taps, each tap is 5ns/64 */
-    val = 0x7fffff80 | 0x00; /* lclk, equivalent of negative delay of data.  0x07 seems to be a boundary */
-    write32breg(8,2);
-    for(i=0; i<8; i++) {
-        val = ((i+0)<<6 | 0x0d) & 0x7fffffff; /* data, 0x22 seems to be a boundary */
-        write32breg(8,2);
-        val = ((i+8)<<6 | 0x0d) & 0x7fffffff;
-        write32breg(8,2);
-    }    
-    /* bit slip */
-    for(i=0; i<8; i++) {
-        val = ((i+16)<<6 | 0x04) & 0x7fffffff;
-        write32breg(8,2);
-        val = ((i+24)<<6 | 0x03) & 0x7fffffff;
-        write32breg(8,2);
-    }
-    Sleep(2);
-    if(opt==1) {
-        /* data source to fifo96 */
-        n = cmd_write_register(&buf32, 10, 0x0000);
-        n = query_response(sockfd, buf, n, buf, 0);
+    write32breg(raddr,paddr);
+    /* lclk, equivalent of negative delay of data. */
+    val = 0x7fffff80 | 0;
+    write32breg(raddr,paddr);
+
+    /* iodelay scan,  0~63 taps,  each tap is 5ns/64 */
+    for(delay=0; delay<adcScanIodelayTapN; delay++) {
+
+        for(i=0; i<nch; i++) {
+            val = ((i+0)<<6 | delay) & 0x7fffffff; /* odd (_P) bits */
+            write32breg(raddr,paddr);
+            val = ((i+8)<<6 | delay) & 0x7fffffff; /* even (_N) bits */
+            write32breg(raddr,paddr);
+        }
+        Sleep(2);
+
         /* write to fifo96 */
-        n = cmd_send_pulse(&buf32, (1<<5) & 0xffff);
+        n = cmd_send_pulse(&buf32, (1<<fifoTrigpaddr) & 0xffff);
         n = query_response(sockfd, buf, n, buf, 0);
         Sleep(2);
         /* read fifo96 */
-        n = cmd_read_datafifo(&buf32, sampleBytes/sizeof(int32_t)-1);
-        n = query_response(sockfd, buf, n, buf, sampleBytes);
+        n = cmd_read_datafifo(&buf32, nBytes/4-1);
+        n = query_response(sockfd, buf, n, buf, nBytes);
 
-        for(i=0; i<sampleBytes-12; i+=12) {
-            for(j=0; j<8; j+=2) {
-                da = buf[i+j],   db = buf[i+j+1], ds[j]   = ((da<<4) & 0x0ff0) | ((db>>4) & 0x000f);
-                da = buf[i+j+1], db = buf[i+j+2], ds[j+1] = ((da<<8) & 0x0f00) | ((db>>0) & 0x00ff);
-                if(ds[j] != 0x0555) df[j]++;
-                if(ds[j+1] != 0x0555) df[j+1]++;
-                debug_printf(" 0x%04x 0x%04x", ds[j], ds[j+1]);
+        for(i=0; i<nch; i++) { onesE[i]=0; onesO[i]=0; }
+        for(i=0; i<nBytes; i+=12) {
+            for(j=0; j<nch; j+=2) {
+                iCh = nch-1 - j; /* Channels are shifted out MSB first, and high channel ID first. */
+                k=j/2*3;
+                da = buf[i+k],   db = buf[i+k+1], ds[iCh]   = ((da<<4) & 0x0ff0) | ((db>>4) & 0x000f);
+                da = buf[i+k+1], db = buf[i+k+2], ds[iCh-1] = ((da<<8) & 0x0f00) | ((db>>0) & 0x00ff);
+                /* count number of ones in data, even and odd bit locations. */
+                for(k=0; k<12; k+=2) {
+                    /* even bits */
+                    onesE[iCh]   += (ds[iCh]  >>    k) & 0x1;
+                    onesE[iCh-1] += (ds[iCh-1]>>    k) & 0x1;
+                    /* odd bits */
+                    onesO[iCh]   += (ds[iCh]  >>(k+1)) & 0x1;
+                    onesO[iCh-1] += (ds[iCh-1]>>(k+1)) & 0x1;
+                }
             }
+            for(iCh=nch-1; iCh>=0; iCh--)
+                debug_printf(" 0x%04x", ds[iCh]);
             debug_printf("\n");
         }
-        n = 0;
-        for(j=0; j<8; j++) if(df[j]) n++;
-        if(n) {
-            error_printf("Not all bits are aligned!  Number of non-0x0555s:\n");
-            for(j=0; j<8; j++)
-                error_printf(" %6d", df[j]);
-            error_printf("\n");
-        } else {
-            printf("ADC configured successfully.\n");
+        debug_printf("# delay = %2d (O,E):", delay);
+        for(i=nch-1; i>=0; i--) {
+            if(onesE[i]==nOnesExpected && onesO[i]==0)
+                succDelay[delay]++;
+            debug_printf(" %5d %5d | ", onesO[i], onesE[i]);
         }
+        debug_printf("\n");
+    }
+    /* pick the best delay value. */
+    j=-1; k=-1;
+    printf("Number of channels with good delay:");
+    for(delay=0; delay<adcScanIodelayTapN; delay++) {
+        printf(" %d", succDelay[delay]);
+        if(j<0 && succDelay[delay]==nch) j=delay;
+        if(j>0 && k<0 && succDelay[delay]<nch) k=delay;
+    }
+    printf("\n");
+    delay = (k+j)/2;
+    if(delay >= 0 && delay < adcScanIodelayTapN) {
+        printf("Best delay value: %d [%ld, %ld)\n", delay, j, k);
+    } else {
+        printf("No good delay value found!  Use 0.\n");
+        delay = 0;
+        ret = 0;
+    }
+    for(i=0; i<nch; i++) {
+        val = ((i+0)<<6 | delay) & 0x7fffffff; /* odd (_P) bits */
+        write32breg(raddr,paddr);
+        val = ((i+8)<<6 | delay) & 0x7fffffff; /* even (_N) bits */
+        write32breg(raddr,paddr);
+    }
 
-        /*
-          for(i=0; i<sampleBytes; i++) {
-          if(i>0 && i%8==0)
-          printf("\n");
-          printf(" 0x%02x", (unsigned char)(buf[i]));
-          }
-          printf("\n");
-        */
+    /* bit slip.  reuse `delay' to scan bitslip values. */
+    val = 0x80000000 | (0x45<<16) | 0x0002 ; /* 0x0001: PAT_DESKEW, 0x0002: PAT_SYNC */
+    write32breg(raddr,paddr);
+
+    for(i=0; i<nch; i++) { onesE[i]=6; onesO[i]=6; }
+    for(delay=0; delay<6; delay++) {
+
+        for(i=0; i<nch; i++) {
+            val = ((i+16)<<6 | delay) & 0x7fffffff; /* odd (_P) bits */
+            write32breg(raddr,paddr);
+            val = ((i+24)<<6 | delay) & 0x7fffffff; /* even (_N) bits */
+            write32breg(raddr,paddr);
+        }
+        Sleep(2);
+
+        /* write to fifo96 */
+        n = cmd_send_pulse(&buf32, (1<<fifoTrigpaddr) & 0xffff);
+        n = query_response(sockfd, buf, n, buf, 0);
+        /* read fifo96 */
+        n = cmd_read_datafifo(&buf32, 10*3*1-1);
+        n = query_response(sockfd, buf, n, buf, 10*3*4*1);
+        /* decode */
+        for(i=0; i<10*3*4*1; i+=12) {
+            for(j=0; j<nch; j+=2) {
+                iCh = nch-1 - j;
+                k=j/2*3;
+                da = buf[i+k],   db = buf[i+k+1], ds[iCh]   = ((da<<4) & 0x0ff0) | ((db>>4) & 0x000f);
+                da = buf[i+k+1], db = buf[i+k+2], ds[iCh-1] = ((da<<8) & 0x0f00) | ((db>>0) & 0x00ff);
+                if((ds[iCh]   & 0x555) == 0x540) onesE[iCh]   = delay; /* even bits */
+                if((ds[iCh]   & 0xaaa) == 0xa80) onesO[iCh]   = delay; /* odd bits */
+                if((ds[iCh-1] & 0x555) == 0x540) onesE[iCh-1] = delay;
+                if((ds[iCh-1] & 0xaaa) == 0xa80) onesO[iCh-1] = delay;
+            }
+        }
+    }
+    printf("Bitslip (O,E):");
+    for(i=nch-1; i>=0; i--) {
+        printf(" %1d %1d |", onesO[i], onesE[i]);
+        if(onesO[i]>=6 || onesE[i]>=6) ret = 0;
+    }
+    printf("\n");
+    if(ret == 0)
+        printf("No good bitslip found!\n");
+    /* update with right values. */
+    for(i=0; i<nch; i++) {
+        val = ((i+16)<<6 | onesO[i]) & 0x7fffffff;
+        write32breg(raddr,paddr);
+        val = ((i+24)<<6 | onesE[i]) & 0x7fffffff;
+        write32breg(raddr,paddr);
+    }
+
+    /* write to fifo96 */
+    n = cmd_send_pulse(&buf32, (1<<fifoTrigpaddr) & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    Sleep(2);
+    /* read fifo96 */
+    n = cmd_read_datafifo(&buf32, 32*3*1-1);
+    n = query_response(sockfd, buf, n, buf, 32*3*4*1);
+    /* decode */
+    for(i=0; i<32*3*4*1; i+=12) {
+        for(j=0; j<nch; j+=2) {
+            iCh = nch-1 - j;
+            k=j/2*3;
+            da = buf[i+k],   db = buf[i+k+1], ds[iCh]   = ((da<<4) & 0x0ff0) | ((db>>4) & 0x000f);
+            da = buf[i+k+1], db = buf[i+k+2], ds[iCh-1] = ((da<<8) & 0x0f00) | ((db>>0) & 0x00ff);
+        }
+        for(iCh=nch-1; iCh>=0; iCh--)
+            debug_printf(" 0x%04x", ds[iCh]);
+        debug_printf("\n");
+    }
+
+    return ret;
+}
+
+/** Configure ADS5282.
+ * @param[in] opt 0: config only;
+ *                1: scan & set for iodelay;
+ *                2: leave in EN_RAMP mode;
+ *                3: 1+2.
+ */
+int configure_adc(int sockfd, char *buf, int opt)
+{
+    const uint32_t raddr=8, paddr=2, spiSelraddr=11, rstpaddr=3;
+    uint32_t *buf32, val;
+    size_t n, nch=8;
+
+    buf32 = (uint32_t*)buf;
+    /* reset ads5282_interface module that is internal to FPGA. */
+    n = cmd_send_pulse(&buf32, (1<<rstpaddr) & 0xffff);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* Select SPI Chip 3 */
+    n = cmd_write_register(&buf32, spiSelraddr, 0x0003);
+    n = query_response(sockfd, buf, n, buf, 0);
+    Sleep(2);
+    /* serial data to ads5282, low 24-bit is effective.  MSB =1 enables serialStart. */
+    /*    serialStart   addr        reg_val */
+    val = 0x80000000 | (0x00<<16) | 0x0001 ; /* RST */
+    write32breg(raddr,paddr); Sleep(2);
+    val = 0x80000000 | (0x42<<16) | 0x8041 ; /* differential clock and PHASE_DDR */
+    write32breg(raddr,paddr);
+    val = 0x80000000 | (0x11<<16) | 0x0444 ; /* drive strength */
+    write32breg(raddr,paddr);
+    val = 0x80000000 | (0x12<<16) | 0x4444 ; /* termination */
+    write32breg(raddr,paddr);
+    val = 0x80000000 | (0x0f<<16) | 0x0000 ; /* channel power down */
+    write32breg(raddr,paddr);
+    if(opt & 0x01) {
+        adc_scan_iodelay(sockfd, buf, nch);
     }
     val = 0x80000000 | (0x45<<16) | 0x0000 ; /* disable PAT_ */
-    write32breg(8,2);
+    write32breg(raddr,paddr);
+    if(opt & 0x02) {
+        val = 0x80000000 | (0x25<<16) | 0x0040 ; /* 0x0040: EN_RAMP */
+        write32breg(raddr,paddr);
+    }
     Sleep(4);
 
-    return n; /* 0 means ADC is successfully configured */
-
-#undef write32breg
+    return 1;
 }
+#undef write32breg
 
 int genesys_prepare(int sockfd)
 {
-    char buf[BUFSIZ];
+    char buf[65536];
     uint32_t *buf32;
     size_t n;
 
@@ -680,7 +817,7 @@ int genesys_read_save(int sockfd)
 
     ibufsd = (SCOPE_DATA_TYPE *)ibuf;
     buf32 = (uint32_t*)buf;
-    
+
     /* sdram rd_start */
     Sleep(200);
     n = cmd_send_pulse(&buf32, 0x100); /* pulse_reg(8) */
@@ -779,7 +916,7 @@ int genesys_read_save(int sockfd)
     printf("event %zd, received bytes: %zd, iP = %zd\n", waveformEvent.eventId, nb, iP);
 
     return hdf5io_write_event(waveformFile, &waveformEvent);
-#undef NBASK    
+#undef NBASK
 }
 
 /******************************************************************************/
@@ -830,7 +967,7 @@ int main(int argc, char **argv)
     nEvents = atol(argv[6]);
     if(argc>7)
         nWfmPerChunk = atol(argv[7]);
-    
+
     debug_printf("outFileName: %s, chMask: 0x%04x, nCh: %zd, decimMask: 0x%02x, nEvents: %zd, nWfmPerChunk: %zd\n",
                  outFileName, chMask, nCh, decimMask, nEvents, nWfmPerChunk);
 
@@ -847,7 +984,7 @@ int main(int argc, char **argv)
         /* DAC controlled electrical offset at input */
         waveformAttr.yzero[i] = config_param.fe_off[i];
     }
-        
+
     sockfd = get_socket(scopeAddress, scopePort);
     if(sockfd < 0) {
         error_printf("Failed to establish a socket.\n");
@@ -862,10 +999,10 @@ int main(int argc, char **argv)
     }
 
     genesys_prepare(sockfd);
-    
+
     waveformFile = hdf5io_open_file(outFileName, nWfmPerChunk, nCh);
     hdf5io_write_waveform_attribute_in_file_header(waveformFile, &waveformAttr);
-    
+
     signal(SIGKILL, signal_kill_handler);
     signal(SIGINT, signal_kill_handler);
 
@@ -874,12 +1011,13 @@ int main(int argc, char **argv)
     printf("start time = %zd\n", startTime = time(NULL));
 
 //    send_and_receive_loop(&sockfd);
+goto END;
 
     for(waveformEvent.eventId = 0; waveformEvent.eventId < nEvents; waveformEvent.eventId++) {
         genesys_arm_acquire(sockfd);
         genesys_read_save(sockfd);
     }
-    
+END:
     stopTime = time(NULL);
 //    pthread_join(wTid, NULL);
 

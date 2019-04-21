@@ -1,20 +1,20 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
+-- Company:
+-- Engineer:
+--
 -- Create Date:    19:32:46 06/23/2015
--- Design Name: 
--- Module Name:    Common package - Behavioral 
--- Project Name: 
+-- Design Name:
+-- Module Name:    Common package - Behavioral
+-- Project Name:
 -- Target Devices:
--- Tool versions: 
+-- Tool versions:
 -- Description:    Defines commonly used types and functions
 --
--- Dependencies: 
+-- Dependencies:
 --
--- Revision: 
+-- Revision:
 -- Revision 0.01 - File Created
--- Additional Comments: 
+-- Additional Comments:
 --
 ----------------------------------------------------------------------------------
 LIBRARY ieee;

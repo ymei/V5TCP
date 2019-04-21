@@ -4,7 +4,7 @@ ARCH   = $(shell uname -m)
 CC             := gcc
 CXX            := g++
 INCLUDE        := -I.
-CFLAGS         := -Wall -O2 -std=c99 -pedantic -D_XOPEN_SOURCE=600
+CFLAGS         := -Wall -O2 -std=c99 -Wpedantic
 CFLAGS_32      := -m32
 SHLIB_CFLAGS   := -fPIC -shared
 SHLIB_EXT      := .so
@@ -21,6 +21,7 @@ LIBS    += $(GSLLIBS)
 ifneq ($(OSTYPE), Linux)
   ifeq ($(OSTYPE), Darwin)
     CC = clang
+    CFLAGS       += -Wno-gnu-zero-variadic-macro-arguments
     GLLIBS       += -framework GLUT -framework OpenGL -framework Cocoa
     SHLIB_CFLAGS := -dynamiclib
     SHLIB_EXT    := .dylib
@@ -32,7 +33,7 @@ ifneq ($(OSTYPE), Linux)
     CC = clang
     GLLIBS += -lGL -lGLU -lglut
   else ifeq ($(OSTYPE), SunOS)
-    CFLAGS := -c -Wall -std=c99 -pedantic
+    CFLAGS := -Wall
   else
     # Let's assume this is win32
     SHLIB_EXT := .dll
@@ -72,7 +73,7 @@ tcpio: tcpio.c command.o
 TMII-Analog: TMII-Analog.c command.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
 TMII-1x8: TMII-1x8.c command.o hdf5rawWaveformIo.o
-	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) -DDEBUG $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
 waveview: waveview.c hdf5rawWaveformIo.o
 	$(CC) $(CFLAGS) $(INCLUDE) -Wno-deprecated-declarations $^ $(LIBS) $(GLLIBS) $(LDFLAGS) -o $@
 hdf5rawWaveformIo.o: hdf5rawWaveformIo.c hdf5rawWaveformIo.h common.h
