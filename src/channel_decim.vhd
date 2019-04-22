@@ -1,22 +1,11 @@
-----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date:    19:32:46 11/16/2015
--- Design Name: 
--- Module Name:    channel_decim - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description: 
---
--- Dependencies: 
---
--- Revision: 
--- Revision 0.01 - File Created
--- Additional Comments: 
--- Decimation module for a group of channels
-----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--! @file channel_decim.vhd
+--! @brief Average and decimate data in a group of channels.
+--! @author Yuan Mei
+--!
+--! This version assumes the input is unsigned.
+--! offset counts 2 CLK after TRIG is seen.
+--------------------------------------------------------------------------------
 LIBRARY ieee;
 USE ieee.std_logic_1164.ALL;
 
@@ -40,8 +29,9 @@ ENTITY channel_decim IS
   PORT (
     RESET           : IN  std_logic;
     CLK             : IN  std_logic;
-    -- high 4-bit is offset, low 4-bit is stride
-    CONFIG          : IN  std_logic_vector(7 DOWNTO 0);
+    -- high 4-bit is stride, middle 4-bit is offset,
+    -- low 4-bit is number of samples to average.
+    CONFIG          : IN  std_logic_vector(11 DOWNTO 0);
     -- trig zeros the offset calculation
     TRIG            : IN  std_logic;
     INDATA_Q        : IN  std_logic_vector(INDATA_WIDTH-1 DOWNTO 0);
@@ -57,28 +47,32 @@ ARCHITECTURE Behavioral OF channel_decim IS
   SIGNAL trig_prev2  : std_logic;
   SIGNAL trig_synced : std_logic;
   --
-  SIGNAL offset_n    : positive;
-  SIGNAL stride_n    : positive;
+  SIGNAL stride_n    : natural;
+  SIGNAL offset_n    : natural;
+  SIGNAL avg_n       : natural;
   --
-  TYPE INTERNALVAL IS ARRAY(NCH-1 DOWNTO 0) OF signed(INTERNAL_WIDTH-1 DOWNTO 0);
+  TYPE INTERNALVAL IS ARRAY(NCH-1 DOWNTO 0) OF unsigned(INTERNAL_WIDTH-1 DOWNTO 0);
   SIGNAL inch_val     : INTERNALVAL;
   SIGNAL internal_val : INTERNALVAL;
-  
+
 BEGIN
 
-  PROCESS (CLK) IS 
+  stride_n <= to_integer(unsigned(CONFIG(11 DOWNTO 8)));
+  offset_n <= to_integer(unsigned(CONFIG(7 DOWNTO 4)));
+  avg_n    <= to_integer(unsigned(CONFIG(3 DOWNTO 0)));
+  PROCESS (CLK) IS
     VARIABLE i : integer;
   BEGIN
     IF falling_edge(CLK) THEN  -- register half-cycle earlier
       FOR i IN 0 TO NCH-1 LOOP
-        inch_val(i) <= resize(signed(INDATA_Q(16*(i+1)-1 DOWNTO 16*i)), INTERNAL_WIDTH);
+        inch_val(i) <= resize(unsigned(INDATA_Q(16*(i+1)-1 DOWNTO 16*i)), INTERNAL_WIDTH);
       END LOOP;
     END IF;
   END PROCESS;
 
   -- capture the rising edge of trigger
   PROCESS (CLK, RESET) IS
-  BEGIN 
+  BEGIN
     IF RESET = '1' THEN
       trig_prev   <= '0';
       trig_prev1  <= '0';
@@ -91,12 +85,10 @@ BEGIN
   END PROCESS;
   trig_synced <= '1' WHEN trig_prev2 = '0' AND trig_prev1 = '1' ELSE '0';
 
-  stride_n <= to_integer(unsigned(CONFIG(3 DOWNTO 0)));
-  offset_n <= to_integer(unsigned(CONFIG(7 DOWNTO 4)));
   PROCESS (CLK, RESET) IS
     VARIABLE i : integer;
-    VARIABLE j : unsigned(15 DOWNTO 0);
-  BEGIN 
+    VARIABLE j : unsigned(INTERNAL_WIDTH-1 DOWNTO 0);
+  BEGIN
     IF RESET = '1' THEN
       FOR i IN 0 TO NCH-1 LOOP
         internal_val(i) <= (OTHERS => '0');
@@ -104,18 +96,25 @@ BEGIN
       OUTVALID <= '0';
       j        := (OTHERS => '0');
     ELSIF rising_edge(CLK) THEN
+      OUTVALID <= '0';
       IF trig_synced = '1' THEN
-        j := to_unsigned(offset_n, j'length);
+        j := to_unsigned(0, j'length);
+        OUTVALID <= '0';
       END IF;
-      IF stride_n = 0 OR j = stride_n THEN
+      IF j = to_unsigned(offset_n, j'length) THEN
         FOR i IN 0 TO NCH-1 LOOP
           internal_val(i) <= inch_val(i);
         END LOOP;
+      END IF;
+      IF j>to_unsigned(offset_n, j'length) AND j<to_unsigned(offset_n+avg_n, j'length) THEN
+        FOR i IN 0 TO NCH-1 LOOP
+          internal_val(i) <= internal_val(i) + inch_val(i);
+        END LOOP;
+      END IF;
+      j := j + 1;
+      IF stride_n = 0 OR j = stride_n THEN
         j        := to_unsigned(0, j'length);
         OUTVALID <= '1';
-      ELSE
-        j := j + 1;
-        OUTVALID <= '0';
       END IF;
     END IF;
   END PROCESS;

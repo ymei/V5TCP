@@ -73,6 +73,8 @@
 #define NTM 8
 #define TM_NCOL 72
 #define TM_NROW 72
+static const uint32_t fifoTrigpaddr=5;
+
 struct config_parameters
 {
     char *scopeAddress;
@@ -436,7 +438,7 @@ int configure_topmetal(int sockfd, char *buf)
     n = cmd_write_register(&buf32, 2, config_param.clk_div);
     n = query_response(sockfd, buf, n, buf, 0);
     /* write sram */
-    n = cmd_send_pulse(&buf32, 0x08); /* pulse_reg(3) */
+    n = cmd_send_pulse(&buf32, 1<<4); /* pulse_reg(4) */
     n = query_response(sockfd, buf, n, buf, 0);
 
 /* force a trigger */
@@ -480,7 +482,7 @@ int adc_scan_iodelay(int sockfd, char *buf, size_t nch)
 {
 #define adcScanIodelayNCH 8
 #define adcScanIodelayTapN 64
-    const uint32_t raddr=adcScanIodelayNCH, paddr=2, fifoTrigpaddr=5;
+    const uint32_t raddr=adcScanIodelayNCH, paddr=2;
     const size_t nSample=1024;
     const size_t nOnesExpected=nSample*6;
     size_t n, nBytes=nSample*12;
@@ -713,12 +715,12 @@ int genesys_prepare(int sockfd)
 
     buf32 = (uint32_t*)buf;
 
-    /* adc, iodelay etc. */
-    configure_adc(sockfd, buf, 1);
     /* dac */
     configure_dac(sockfd, buf);
     /* topmetal */
     configure_topmetal(sockfd, buf);
+    /* adc, iodelay etc. */
+    configure_adc(sockfd, buf, 3);
 
     /* wr_addr_begin */
     n = cmd_write_register(&buf32, 12, 0x0000);
@@ -734,17 +736,34 @@ int genesys_prepare(int sockfd)
     n = cmd_write_register(&buf32, 16, 0x0000); /* low bits */
     n = query_response(sockfd, buf, n, buf, 0);
     /* data path (source) selection */
-    n = cmd_write_register(&buf32, 10, 0x0003);
+    n = cmd_write_register(&buf32, 10, 0x0003); /* 0x3: sdram */
     n = query_response(sockfd, buf, n, buf, 0);
 
-    /* channel decimation, low 4-bit is stride, high 4-bit is offset */
+    /* select ch_decim as data source */
+    n = cmd_write_register(&buf32, 10, 0x8000);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* channel avg/decimation, high 4-bit is stride, middle 4-bit is offset,
+       low 4-bit is number of samples to average. */
     n = cmd_write_register(&buf32, 7, decimMask);
+    n = query_response(sockfd, buf, n, buf, 0);
+    /* write to fifo96 */
+    n = cmd_send_pulse(&buf32, (1<<fifoTrigpaddr) & 0xffff);
     n = query_response(sockfd, buf, n, buf, 0);
 
     /* reference clock frequency division factor (2**n) */
     // n = cmd_write_register(&buf32, 15, 3);
     // n = query_response(sockfd, buf, n, buf, 0);
 
+    /* Read and print some data */
+    size_t nBytes = 1024*12 ;
+    n = cmd_read_datafifo(&buf32, nBytes/4-1);
+    n = query_response(sockfd, buf, n, buf, nBytes);
+    printf("ch_decim n = %zd\n", n);
+    for(intptr_t i=0; i<nBytes; i+=2) {
+        if(i%12==0) printf("\n");
+        printf(" 0x%02x%02x", (uint8_t)buf[i], (uint8_t)buf[i+1]);
+    }
+    printf("\n");
     return 1;
 }
 
@@ -935,7 +954,7 @@ int main(int argc, char **argv)
         error_printf("%s scopeAdddress scopePort outFileName chMask(0x..) decimMask nEvents nWfmPerChunk\n",
                      argv[0]);
         error_printf("chMask must be 0xff\n");
-        error_printf("decimMask(0x..): high 4-bit is offset, low 4-bit is stride\n");
+        error_printf("decimMask(0x..): high 4-bit is stride, middle 4-bit is offset, low 4-bit is avg_n\n");
         return EXIT_FAILURE;
     }
 
@@ -968,8 +987,8 @@ int main(int argc, char **argv)
     if(argc>7)
         nWfmPerChunk = atol(argv[7]);
 
-    debug_printf("outFileName: %s, chMask: 0x%04x, nCh: %zd, decimMask: 0x%02x, nEvents: %zd, nWfmPerChunk: %zd\n",
-                 outFileName, chMask, nCh, decimMask, nEvents, nWfmPerChunk);
+    printf("outFileName: %s, chMask: 0x%04x, nCh: %zd, decimMask: 0x%02x, nEvents: %zd, nWfmPerChunk: %zd\n",
+        outFileName, chMask, nCh, decimMask, nEvents, nWfmPerChunk);
 
     waveformAttr.chMask  = chMask;
     waveformAttr.nPt     = SCOPE_MEM_LENGTH_MAX * (SCOPE_NCH / nCh);

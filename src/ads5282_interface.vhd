@@ -67,18 +67,27 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
 
   COMPONENT shiftreg_drive
     GENERIC (
-      WIDTH   : positive := 24;           -- parallel data width
-      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
+      DATA_WIDTH        : positive  := 24;  -- parallel data width
+      CLK_DIV_WIDTH     : positive  := 16;
+      DELAY_AFTER_SYNCn : natural   := 0;  -- number of SCLK cycles' wait after falling edge OF SYNCn
+      SCLK_IDLE_LEVEL   : std_logic := '1';  -- High or Low for SCLK when not switching
+      DOUT_DRIVE_EDGE   : std_logic := '0';  -- 1/0 rising/falling edge of SCLK drives new DOUT bit
+      DIN_CAPTURE_EDGE  : std_logic := '1'  -- 1/0 rising/falling edge of SCLK captures new DIN bit
     );
-    PORT(
-      CLK   : IN  std_logic;
-      RESET : IN  std_logic;
-      DATA  : IN  std_logic_vector(WIDTH-1 DOWNTO 0);
-      START : IN  std_logic;
-      BUSY  : OUT std_logic;
-      SCLK  : OUT std_logic;
-      DOUT  : OUT std_logic;
-      SYNCn : OUT std_logic
+    PORT (
+      CLK     : IN  std_logic;          -- clock
+      RESET   : IN  std_logic;          -- reset
+      -- internal data interface
+      CLK_DIV : IN  std_logic_vector(CLK_DIV_WIDTH-1 DOWNTO 0);  -- SCLK freq is CLK / 2**(CLK_DIV)
+      DATAIN  : IN  std_logic_vector(DATA_WIDTH-1 DOWNTO 0);
+      START   : IN  std_logic;
+      BUSY    : OUT std_logic;
+      DATAOUT : OUT std_logic_vector(DATA_WIDTH-1 DOWNTO 0);
+      -- external serial interface
+      SCLK    : OUT std_logic;
+      DOUT    : OUT std_logic;
+      SYNCn   : OUT std_logic;
+      DIN     : IN  std_logic
     );
   END COMPONENT;
   --
@@ -174,7 +183,6 @@ ARCHITECTURE Behavioral OF ads5282_interface IS
   SIGNAL serialStart           : std_logic;
   SIGNAL serialStartO          : std_logic;
   SIGNAL serialBusy            : std_logic;
-  SIGNAL sclk_buf              : std_logic;
   --
   SIGNAL configAddr            : std_logic_vector(CONFIG'length-CTRL_DATA_WIDTH-1 DOWNTO 0);
   CONSTANT bufrRSTAddr         : std_logic_vector(CONFIG'length-CTRL_DATA_WIDTH-1 DOWNTO 0) := (CONFIG'length-CTRL_DATA_WIDTH-1 => '0', OTHERS => '1');
@@ -290,23 +298,32 @@ BEGIN
       serialStartO <= '0';
     END IF;
   END PROCESS;
-  --
+
+  -- ADS5282 requires the rising edge of SCLK to be in the middle OF SDATA.
   sd : shiftreg_drive
     GENERIC MAP (
-      WIDTH   => 24,
-      CLK_DIV => 2
+      DATA_WIDTH        => 24,          -- parallel data width
+      CLK_DIV_WIDTH     => 16,
+      DELAY_AFTER_SYNCn => 0,  -- number of SCLK cycles' wait after falling edge OF SYNCn
+      SCLK_IDLE_LEVEL   => '1',  -- High or Low for SCLK when not switching
+      DOUT_DRIVE_EDGE   => '0',  -- 1/0 rising/falling edge of SCLK drives new DOUT bit
+      DIN_CAPTURE_EDGE  => '1'  -- 1/0 rising/falling edge of SCLK captures new DIN bit
     )
     PORT MAP (
-      CLK   => CLK,
-      RESET => RESET,
-      DATA  => configFIFOout(23 DOWNTO 0),
-      START => serialStartO,
-      BUSY  => serialBusy,
-      SCLK  => sclk_buf,
-      DOUT  => SDATA,
-      SYNCn => CSn
+      CLK     => CLK,
+      RESET   => RESET,
+      -- internal data interface
+      CLK_DIV => x"0003",               -- SCLK freq is CLK / 2**(CLK_DIV)
+      DATAIN  => configFIFOout(23 DOWNTO 0),
+      START   => serialStartO,
+      BUSY    => serialBusy,
+      DATAOUT => OPEN,
+      -- external serial interface
+      SCLK    => SCLK,
+      DOUT    => SDATA,
+      SYNCn   => CSn,
+      DIN     => '0'
     );
-  SCLK <= NOT sclk_buf;  -- ADS5282 requires the rising edge of SCLK to be in the middle OF SDATA.
 
   -- ADCLK directly from the ADC
   adclk_ext_ibufds_inst : IBUFGDS

@@ -1,25 +1,11 @@
 --------------------------------------------------------------------------------
 --! @file fifo2shiftreg.vhd
---! @brief Writes data into FIFO, then this module pushes them out via serial bus (SPI).
---
--- Company: 
--- Engineer: Yuan Mei
--- 
--- Create Date:    23:56:58 6/22/2015
--- Design Name:    FIFO to shift register driver
--- Module Name:    fifo2shiftreg - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description: 
---
--- Dependencies: 
---
--- Revision: 
--- Revision 0.01 - File Created
--- Additional Comments: 
---
+--! @brief Writes data into FIFO, then this module pushes them out
+--!        through serial bus (SPI).  DIN is captured simultaneously.
+--! @author Yuan Mei
+--!
 ----------------------------------------------------------------------------------
+
 LIBRARY IEEE;
 USE IEEE.STD_LOGIC_1164.ALL;
 
@@ -34,22 +20,31 @@ USE UNISIM.VComponents.ALL;
 
 ENTITY fifo2shiftreg IS
   GENERIC (
-    WIDTH   : positive := 32;           -- parallel data width
-    CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
+    DATA_WIDTH        : positive  := 32; -- parallel data width
+    CLK_DIV_WIDTH     : positive  := 16;
+    DELAY_AFTER_SYNCn : natural   := 0;  -- number of SCLK cycles' wait after falling edge OF SYNCn
+    SCLK_IDLE_LEVEL   : std_logic := '0'; -- High or Low for SCLK when not switching
+    DOUT_DRIVE_EDGE   : std_logic := '1'; -- 1/0 rising/falling edge of SCLK drives new DOUT bit
+    DIN_CAPTURE_EDGE  : std_logic := '0'  -- 1/0 rising/falling edge of SCLK captures new DIN bit
   );
   PORT (
     CLK      : IN  std_logic;           -- clock
     RESET    : IN  std_logic;           -- reset
     -- input data interface
     WR_CLK   : IN  std_logic;           -- FIFO write clock
-    DIN      : IN  std_logic_vector(15 DOWNTO 0);
+    DINFIFO  : IN  std_logic_vector(15 DOWNTO 0);
     WR_EN    : IN  std_logic;
     WR_PULSE : IN  std_logic;  -- one pulse writes one word, regardless of pulse duration
     FULL     : OUT std_logic;
-    -- output
-    SCLK  : OUT std_logic;
-    DOUT  : OUT std_logic;
-    SYNCn : OUT std_logic
+    -- captured data
+    BUSY     : OUT std_logic;
+    DATAOUT  : OUT std_logic_vector(DATA_WIDTH-1 DOWNTO 0);
+    -- serial interface
+    CLK_DIV  : IN  std_logic_vector(CLK_DIV_WIDTH-1 DOWNTO 0);  -- SCLK freq is CLK / 2**(CLK_DIV)
+    SCLK     : OUT std_logic;
+    DOUT     : OUT std_logic;
+    SYNCn    : OUT std_logic;
+    DIN      : IN  std_logic
   );
 END fifo2shiftreg;
 
@@ -57,18 +52,27 @@ ARCHITECTURE Behavioral OF fifo2shiftreg IS
 
   COMPONENT shiftreg_drive
     GENERIC (
-      WIDTH   : positive := 32;           -- parallel data width
-      CLK_DIV : positive := 2             -- SCLK freq is CLK / 2**(CLK_DIV+1)
-    );    
-    PORT(
-      CLK   : IN  std_logic;
-      RESET : IN  std_logic;
-      DATA  : IN  std_logic_vector(31 DOWNTO 0);
-      START : IN  std_logic;
-      BUSY  : OUT std_logic;
-      SCLK  : OUT std_logic;
-      DOUT  : OUT std_logic;
-      SYNCn : OUT std_logic
+      DATA_WIDTH        : positive  := 32;  -- parallel data width
+      CLK_DIV_WIDTH     : positive  := 16;
+      DELAY_AFTER_SYNCn : natural   := 0;  -- number of SCLK cycles' wait after falling edge OF SYNCn
+      SCLK_IDLE_LEVEL   : std_logic := '0';  -- High or Low for SCLK when not switching
+      DOUT_DRIVE_EDGE   : std_logic := '1';  -- 1/0 rising/falling edge of SCLK drives new DOUT bit
+      DIN_CAPTURE_EDGE  : std_logic := '0'  -- 1/0 rising/falling edge of SCLK captures new DIN bit
+    );
+    PORT (
+      CLK     : IN  std_logic;          -- clock
+      RESET   : IN  std_logic;          -- reset
+      -- internal data interface
+      CLK_DIV : IN  std_logic_vector(CLK_DIV_WIDTH-1 DOWNTO 0);  -- SCLK freq is CLK / 2**(CLK_DIV)
+      DATAIN  : IN  std_logic_vector(DATA_WIDTH-1 DOWNTO 0);
+      START   : IN  std_logic;
+      BUSY    : OUT std_logic;
+      DATAOUT : OUT std_logic_vector(DATA_WIDTH-1 DOWNTO 0);
+      -- external serial interface
+      SCLK    : OUT std_logic;
+      DOUT    : OUT std_logic;
+      SYNCn   : OUT std_logic;
+      DIN     : IN  std_logic
     );
   END COMPONENT;
   --
@@ -98,39 +102,50 @@ ARCHITECTURE Behavioral OF fifo2shiftreg IS
     );
   END COMPONENT;
   --
-  SIGNAL sd_start   : std_logic;
-  SIGNAL sd_busy    : std_logic;
+  SIGNAL sd_start     : std_logic;
+  SIGNAL sd_busy      : std_logic;
   --
-  SIGNAL fifo_dout  : std_logic_vector(31 DOWNTO 0);
-  SIGNAL fifo_wr_en : std_logic;
-  SIGNAL fifo_rd_en : std_logic;
-  SIGNAL fifo_empty : std_logic;
+  SIGNAL fifo_dout    : std_logic_vector(31 DOWNTO 0);
+  SIGNAL fifo_wr_en   : std_logic;
+  SIGNAL fifo_rd_en   : std_logic;
+  SIGNAL fifo_empty   : std_logic;
   --
-  SIGNAL es_so      : std_logic;
-BEGIN 
+  SIGNAL es_so        : std_logic;
+
+BEGIN
 
   sd : shiftreg_drive
     GENERIC MAP (
-      WIDTH   => WIDTH,
-      CLK_DIV => CLK_DIV
+      DATA_WIDTH        => DATA_WIDTH,
+      CLK_DIV_WIDTH     => CLK_DIV_WIDTH,
+      DELAY_AFTER_SYNCn => DELAY_AFTER_SYNCn,
+      SCLK_IDLE_LEVEL   => SCLK_IDLE_LEVEL,
+      DOUT_DRIVE_EDGE   => DOUT_DRIVE_EDGE,
+      DIN_CAPTURE_EDGE  => DIN_CAPTURE_EDGE
     )
     PORT MAP (
-      CLK   => CLK,
-      RESET => RESET,
-      DATA  => fifo_dout(WIDTH-1 DOWNTO 0),
-      START => sd_start,
-      BUSY  => sd_busy,
-      SCLK  => SCLK,
-      DOUT  => DOUT,
-      SYNCn => SYNCn
+      CLK     => CLK,
+      RESET   => RESET,
+      -- internal data interface
+      CLK_DIV => CLK_DIV,
+      DATAIN  => fifo_dout(DATA_WIDTH-1 DOWNTO 0),
+      START   => sd_start,
+      BUSY    => sd_busy,
+      DATAOUT => DATAOUT,
+      -- external serial interface
+      SCLK    => SCLK,
+      DOUT    => DOUT,
+      SYNCn   => SYNCn,
+      DIN     => DIN
     );
+  BUSY <= sd_busy;
 
   fifo : fifo16to32
     PORT MAP (
       RST    => RESET,
       WR_CLK => WR_CLK,
       RD_CLK => CLK,
-      DIN    => DIN,
+      DIN    => DINFIFO,
       WR_EN  => fifo_wr_en,
       RD_EN  => fifo_rd_en,
       DOUT   => fifo_dout,
@@ -139,9 +154,19 @@ BEGIN
     );
 
   sd_start   <= NOT fifo_empty;
-  fifo_rd_en <= NOT sd_busy;
+  -- rising edge of busy
+  rd_es : edge_sync
+    GENERIC MAP (
+      EDGE => '1'  -- '1'  :  rising edge,  '0' falling edge
+    )
+    PORT MAP (
+      RESET => RESET,
+      CLK   => CLK,
+      EI    => sd_busy,
+      SO    => fifo_rd_en
+    );
 
-  es : edge_sync
+  wr_es : edge_sync
     GENERIC MAP (
       EDGE => '1'  -- '1'  :  rising edge,  '0' falling edge
     )
@@ -152,5 +177,5 @@ BEGIN
       SO    => es_so
     );
   fifo_wr_en <= es_so OR WR_EN;
-  
+
 END Behavioral;

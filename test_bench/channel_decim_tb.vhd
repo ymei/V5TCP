@@ -1,21 +1,21 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
+-- Company:
+-- Engineer:
+--
 -- Create Date: 11/16/2015 07:39:31 PM
--- Design Name: 
+-- Design Name:
 -- Module Name: channel_decim_tb - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
+-- Project Name:
+-- Target Devices:
+-- Tool Versions:
+-- Description:
+--
+-- Dependencies:
+--
 -- Revision:
 -- Revision 0.01 - File Created
 -- Additional Comments:
--- 
+--
 ----------------------------------------------------------------------------------
 
 
@@ -40,7 +40,7 @@ ARCHITECTURE Behavioral OF channel_decim_tb IS
     PORT (
       RESET     : IN  std_logic;
       CLK       : IN  std_logic;
-      CONFIG    : IN  std_logic_vector(7 DOWNTO 0);
+      CONFIG    : IN  std_logic_vector(11 DOWNTO 0);
       TRIG      : IN  std_logic;
       INDATA_Q  : IN  std_logic_vector(128-1 DOWNTO 0);
       OUTVALID  : OUT std_logic;
@@ -51,7 +51,7 @@ ARCHITECTURE Behavioral OF channel_decim_tb IS
   SIGNAL   RESET         : std_logic := '0';
   SIGNAL   CLK           : std_logic := '0';
   --
-  SIGNAL   CONFIG        : std_logic_vector(7 DOWNTO 0) := x"05";
+  SIGNAL   CONFIG        : std_logic_vector(11 DOWNTO 0) := x"201";
   SIGNAL   TRIG          : std_logic := '0';
   SIGNAL   INDATA_Q      : std_logic_vector(128-1 DOWNTO 0);
   SIGNAL   OUTVALID      : std_logic;

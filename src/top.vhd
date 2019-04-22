@@ -36,7 +36,7 @@ USE work.common_pkg.ALL;
 
 ENTITY top IS
   GENERIC (
-    includeChipscope : boolean := false
+    includeChipscope : boolean := true
   );
   PORT (
     clk_xtal      : IN    std_logic;
@@ -331,22 +331,31 @@ ARCHITECTURE Behavioral OF top IS
   END COMPONENT;
   COMPONENT fifo2shiftreg
     GENERIC (
-      WIDTH   : positive := 32;         -- parallel data width
-      CLK_DIV : positive := 2           -- SCLK freq is CLK / 2**(CLK_DIV)
+      DATA_WIDTH        : positive  := 32;  -- parallel data width
+      CLK_DIV_WIDTH     : positive  := 16;
+      DELAY_AFTER_SYNCn : natural   := 0;  -- number of SCLK cycles' wait after falling edge OF SYNCn
+      SCLK_IDLE_LEVEL   : std_logic := '0';  -- High or Low for SCLK when not switching
+      DOUT_DRIVE_EDGE   : std_logic := '1';  -- 1/0 rising/falling edge of SCLK drives new DOUT bit
+      DIN_CAPTURE_EDGE  : std_logic := '0'  -- 1/0 rising/falling edge of SCLK captures new DIN bit
     );
     PORT (
       CLK      : IN  std_logic;         -- clock
       RESET    : IN  std_logic;         -- reset
       -- input data interface
       WR_CLK   : IN  std_logic;         -- FIFO write clock
-      DIN      : IN  std_logic_vector(15 DOWNTO 0);
+      DINFIFO  : IN  std_logic_vector(15 DOWNTO 0);
       WR_EN    : IN  std_logic;
       WR_PULSE : IN  std_logic;  -- one pulse writes one word, regardless of pulse duration
       FULL     : OUT std_logic;
-      -- output
+      -- captured data
+      BUSY     : OUT std_logic;
+      DATAOUT  : OUT std_logic_vector(DATA_WIDTH-1 DOWNTO 0);
+      -- serial interface
+      CLK_DIV  : IN  std_logic_vector(CLK_DIV_WIDTH-1 DOWNTO 0);  -- SCLK freq is CLK / 2**(CLK_DIV)
       SCLK     : OUT std_logic;
       DOUT     : OUT std_logic;
-      SYNCn    : OUT std_logic
+      SYNCn    : OUT std_logic;
+      DIN      : IN  std_logic
     );
   END COMPONENT;
   ---------------------------------------------> Topmetal
@@ -421,8 +430,9 @@ ARCHITECTURE Behavioral OF top IS
   PORT (
     RESET           : IN  std_logic;
     CLK             : IN  std_logic;
-    -- high 4-bit is offset, low 4-bit is stride
-    CONFIG          : IN  std_logic_vector(7 DOWNTO 0);
+    -- high 4-bit is stride, middle 4-bit is offset,
+    -- low 4-bit is number of samples to average.
+    CONFIG          : IN  std_logic_vector(11 DOWNTO 0);
     -- trig zeros the offset calculation
     TRIG            : IN  std_logic;
     INDATA_Q        : IN  std_logic_vector(INDATA_WIDTH-1 DOWNTO 0);
@@ -597,6 +607,7 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL ads5282_2_data                    : ADS5282DATA(3 DOWNTO 0);
   SIGNAL ads5282_2_config                  : std_logic_vector(31 DOWNTO 0);
   SIGNAL ads5282_2_confps                  : std_logic;
+  SIGNAL ads5282_ch_data                   : std_logic_vector(95 DOWNTO 0);
   SIGNAL fifo96_din                        : std_logic_vector(95 DOWNTO 0);
   SIGNAL fifo96_wrclk                      : std_logic;
   SIGNAL fifo96_wren                       : std_logic;
@@ -612,6 +623,10 @@ ARCHITECTURE Behavioral OF top IS
   SIGNAL ch_decim_indata_q                 : std_logic_vector(127 DOWNTO 0);
   SIGNAL ch_decim_outvalid                 : std_logic;
   SIGNAL ch_decim_outdata_q                : std_logic_vector(127 DOWNTO 0);
+  SIGNAL ch_decim_ich                      : integer RANGE 0 TO 7;
+  SIGNAL ch_decim_ich_q                    : std_logic_vector(95 DOWNTO 0);
+  SIGNAL ch_decim_ich_wren                 : std_logic;
+
   ---------------------------------------------> ADC
   SIGNAL usr_data_output                   : std_logic_vector (7 DOWNTO 0);
 
@@ -674,10 +689,10 @@ BEGIN
     cs_ila_inst : cs_ila
       PORT MAP (
         CONTROL => cs_control0,
-        CLK     => NOT clk_125MHz,
+        CLK     => fifo96_wrclk,
         TRIG0   => cs_trig0
       );
-    cs_trig0(39) <= clk_100MHz;
+    -- cs_trig0(39) <= clk_100MHz;
   END GENERATE IncChipScope;
   ---------------------------------------------> Chipscope
   ---------------------------------------------< gig_eth
@@ -764,7 +779,7 @@ BEGIN
       RX_RDY  => uart_rx_rdy,
       TX_DATA => DIPSw8Bit,
       TX_EN   => '1',
-      TX_RDY  => cs_trig0(2),
+      TX_RDY  => OPEN, -- cs_trig0(2),
       -- serial lines
       RX_PIN  => UART_RX_PIN,
       TX_PIN  => UART_TX_PIN
@@ -811,7 +826,7 @@ BEGIN
       DATA_FIFO_RDCLK => control_data_fifo_rdclk
     );
   control_clk           <= clk_125MHz;
-  cs_trig0(18 DOWNTO 3) <= pulse_reg;
+  -- cs_trig0(18 DOWNTO 3) <= pulse_reg;
   cs_vio_syncin         <= config_reg(35 DOWNTO 0);
   cs_vio_asyncin        <= config_reg(71 DOWNTO 36);
   ---------------------------------------------> UART/RS232
@@ -890,15 +905,6 @@ BEGIN
   --control_data_fifo_empty <= sdram_data_fifo_empty WHEN DIPSw8Bit(6) = '0' ELSE '0';
   --sdram_data_fifo_rden    <= control_data_fifo_rdreq OR DIPSw8Bit(5);
 
-  control_data_fifo_q <= sdram_data_fifo_dout WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-                         ELSE fifo96_reduced_q;
-  control_data_fifo_empty <= sdram_data_fifo_empty WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-                             ELSE fifo96_reduced_empty;
-  sdram_data_fifo_rden <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
-                          ELSE '0';
-  fifo96_reduced_rdreq <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) /= "11"
-                          ELSE '0';
-
   -- for memory write continuity test
   --sdram_idata_fifo_wrclk <= clk_50MHz;
   PROCESS (sdram_idata_fifo_wrclk) IS
@@ -939,22 +945,31 @@ BEGIN
   -- for analog frontend
   dac8568_inst : fifo2shiftreg
     GENERIC MAP (
-      WIDTH   => 32,                    -- parallel data width
-      CLK_DIV => 2                      -- SCLK freq is CLK / 2**(CLK_DIV+1)
+      DATA_WIDTH        => 32,   -- parallel data width
+      CLK_DIV_WIDTH     => 16,
+      DELAY_AFTER_SYNCn => 0,    -- number of SCLK cycles' wait after falling edge OF SYNCn
+      SCLK_IDLE_LEVEL   => '0',  -- High or Low for SCLK when not switching
+      DOUT_DRIVE_EDGE   => '1',  -- 1/0 rising/falling edge of SCLK drives new DOUT bit
+      DIN_CAPTURE_EDGE  => '0'   -- 1/0 rising/falling edge of SCLK captures new DIN bit
     )
     PORT MAP (
       CLK      => control_clk,          -- clock
       RESET    => tm_rst,               -- reset
       -- input data interface
       WR_CLK   => control_clk,          -- FIFO write clock
-      DIN      => config_reg(15 DOWNTO 0),
+      DINFIFO  => config_reg(15 DOWNTO 0),
       WR_EN    => '0',
       WR_PULSE => pulse_reg(1),  -- one pulse writes one word, regardless of pulse duration
       FULL     => OPEN,
-      -- output
+      -- captured data
+      BUSY     => OPEN,
+      DATAOUT  => OPEN,
+      -- serial interface
+      CLK_DIV  => x"0003",              -- SCLK freq is CLK / 2**(CLK_DIV+1)
       SCLK     => spi_sclk(0),
       DOUT     => spi_data(0),
-      SYNCn    => dac_sync_n
+      SYNCn    => dac_sync_n,
+      DIN      => '0'
     );
   spi_sync_n0_obuf_inst : OBUF
     PORT MAP (
@@ -1158,8 +1173,9 @@ BEGIN
   PORT MAP (
     RESET           => reset,
     CLK             => ads5282_0_adclk,
-    -- high 4-bit is offset, low 4-bit is stride
-    CONFIG          => config_reg(16*7+7 DOWNTO 16*7),
+    -- high 4-bit is stride, middle 4-bit is offset,
+    -- low 4-bit is number of samples to average.
+    CONFIG          => config_reg(16*7+11 DOWNTO 16*7),
     -- trig zeros the offset calculation
     TRIG            => tm_rst_s,
     INDATA_Q        => ch_decim_indata_q,
@@ -1167,9 +1183,42 @@ BEGIN
     OUTDATA_Q       => ch_decim_outdata_q
   );
   ch_decim_indata_assign : FOR iCh IN 0 TO 7 GENERATE
-    ch_decim_indata_q(16*iCh+15 DOWNTO 16*iCh+8) <= ads5282_0_data(iCh)(11 DOWNTO 4);
-    ch_decim_indata_q(16*iCh+7  DOWNTO 16*iCh)   <= ads5282_0_data(iCh)(3 DOWNTO 0) & "0000";
+    ch_decim_indata_q(16*iCh+15 DOWNTO 16*iCh) <= "0000" & ads5282_0_data(iCh);
   END GENERATE;
+
+  -- pick data from only one channel for transmission.
+  ch_decim_ich <= to_integer(unsigned(config_reg(16*10+11 DOWNTO 16*10+8)));
+  -- PROCESS (fifo96_wrclk, reset)
+  --   VARIABLE i : integer RANGE 0 TO 15;
+  -- BEGIN
+  --   IF reset = '1' THEN
+  --     ch_decim_ich_q    <= (OTHERS => '0');
+  --     ch_decim_ich_wren <= '0';
+  --     i                 := 0;
+  --   ELSIF rising_edge(fifo96_wrclk) THEN
+  --     ch_decim_ich_wren <= '0';
+  --     IF fifo96_trig = '1' THEN
+  --       i := 0;
+  --     END IF;
+  --     IF ch_decim_outvalid = '1' THEN
+  --       ch_decim_ich_q(16*i+15 DOWNTO 16*i) <=
+  --         ch_decim_outdata_q(16*ch_decim_ich+15 DOWNTO 16*ch_decim_ich);
+  --       i := i + 1;
+  --     END IF;
+  --     IF i >= 6 THEN
+  --       i                 := 0;
+  --       ch_decim_ich_wren <= '1';
+  --     END IF;
+  --   END IF;
+  -- END PROCESS;
+  ch_decim_ich_q    <= ch_decim_outdata_q(ch_decim_ich_q'length-1 DOWNTO 0);
+  ch_decim_ich_wren <= ch_decim_outvalid;
+  --
+  cs_trig0(15 DOWNTO 0)  <= ch_decim_indata_q(15 DOWNTO 0);
+  cs_trig0(31 DOWNTO 16) <= ch_decim_outdata_q(15 DOWNTO 0);
+  cs_trig0(37 DOWNTO 32) <= ch_decim_ich_q(5 DOWNTO 0);
+  cs_trig0(38)           <= ch_decim_outvalid;
+  cs_trig0(39)           <= ch_decim_ich_wren;
 
   fifo96_inst : fifo96
     PORT MAP (
@@ -1183,7 +1232,10 @@ BEGIN
       FULL   => OPEN,
       EMPTY  => fifo96_empty
     );
-  fifo96_wren  <= '1';
+  fifo96_wren  <= ch_decim_ich_wren WHEN config_reg(16*10+15) = '1' ELSE
+                  '1';
+  fifo96_din   <= ch_decim_ich_q WHEN config_reg(16*10+15) = '1' ELSE
+                  ads5282_ch_data;
   fifo96_trig  <= pulse_reg(5);
   fifo96_valid <= NOT fifo96_empty;
   fifo_rdwidth_reducer_inst : fifo_rdwidth_reducer
@@ -1212,7 +1264,8 @@ BEGIN
     control_clk                     WHEN OTHERS;
 
   WITH config_reg(16*10+1 DOWNTO 16*10) SELECT
-    fifo96_din <= ads5282_0_data(7) & ads5282_0_data(6) & ads5282_0_data(5) & ads5282_0_data(4) &
+    ads5282_ch_data <=
+                  ads5282_0_data(7) & ads5282_0_data(6) & ads5282_0_data(5) & ads5282_0_data(4) &
                   ads5282_0_data(3) & ads5282_0_data(2) & ads5282_0_data(1) & ads5282_0_data(0)
     WHEN "00",
     ads5282_1_data(7) & ads5282_1_data(6) & ads5282_1_data(5) & ads5282_1_data(4) &
@@ -1223,8 +1276,17 @@ BEGIN
     WHEN "10",
     x"000000000000000000000000" WHEN OTHERS;
 
-  cs_trig0(30 DOWNTO 19) <= ads5282_0_data(7);
-  cs_trig0(31)           <= ads5282_0_adclk;
+  control_data_fifo_q <= sdram_data_fifo_dout WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                         ELSE fifo96_reduced_q;
+  control_data_fifo_empty <= sdram_data_fifo_empty WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                             ELSE fifo96_reduced_empty;
+  sdram_data_fifo_rden <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) = "11"
+                          ELSE '0';
+  fifo96_reduced_rdreq <= control_data_fifo_rdreq WHEN config_reg(16*10+1 DOWNTO 16*10) /= "11"
+                          ELSE '0';
+
+  -- cs_trig0(30 DOWNTO 19) <= ads5282_0_data(7);
+  -- cs_trig0(31)           <= ads5282_0_adclk;
   ---------------------------------------------> ADC
 
   pulsegen_inst : pulsegen
@@ -1234,7 +1296,7 @@ BEGIN
     PORT MAP (
       clk => clk_125MHz,
       I   => BTN(0),
-      O   => cs_trig0(1)
+      O   => OPEN -- cs_trig0(1)
     );
 
 END Behavioral;

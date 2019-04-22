@@ -1,24 +1,11 @@
-----------------------------------------------------------------------------------
--- Company: 
--- Engineer: Yuan Mei
--- 
--- Create Date:    23:56:58 6/28/2015
--- Design Name:    FIFO read width reducer
--- Module Name:    fifo_rdwidth_reducer - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description:    This module is placed in between a FWFT FIFO and its
---                 consumer to match the data width difference.  Only width
---                 reduction is supported.
---
--- dependencies: 
---
--- Revision: 
--- Revision 0.01 - File Created
--- Additional Comments: 
---
-----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--! @file fifo_rdwidth_reducer.vhd
+--! @brief Read FIFO at a reduced width by means of shift-register.
+--!
+--! This module is placed in between a FWFT FIFO and its consumer to match
+--! difference data widths.  Only width reduction is supported.
+--------------------------------------------------------------------------------
+
 LIBRARY IEEE;
 USE IEEE.STD_LOGIC_1164.ALL;
 
@@ -35,7 +22,7 @@ ENTITY fifo_rdwidth_reducer IS
   GENERIC (
     RDWIDTH    : positive := 32;
     RDRATIO    : positive := 3;
-    SHIFTORDER : positive := 1          -- 1: MSB first, 0: LSB first
+    SHIFTORDER : natural  := 1          -- 1: MSB first, 0: LSB first
   );
   PORT (
     RESET : IN  std_logic;
@@ -58,7 +45,7 @@ ARCHITECTURE Behavioral OF fifo_rdwidth_reducer IS
   TYPE state_t IS (S0, S1);
   SIGNAL state    : state_t;
 
-BEGIN 
+BEGIN
 
   data_proc : PROCESS (CLK, RESET)
   BEGIN
