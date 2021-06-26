@@ -72,7 +72,7 @@ static size_t nCh;
 static size_t nEvents;
 
 /******************************************************************************/
-#define Sleep(x) (usleep((x)*5000))
+#define msleep(x) (usleep((x)*1000))
 /******************************************************************************/
 
 #define MAXSLEEP 2
@@ -128,7 +128,7 @@ static int get_socket(char *host, char *port)
             close(sockfd);
             warn("setsockopt SO_KEEPALIVE");
             continue;
-        } 
+        }
         if(connect_retry(sockfd, ap->ai_addr, ap->ai_addrlen) < 0) {
             close(sockfd);
             warn("connect");
@@ -207,9 +207,9 @@ static void atexit_flush_files(void)
 static void signal_kill_handler(int sig)
 {
     printf("\nstart time = %zd\n", startTime);
-    printf("stop time  = %zd\n", time(NULL));    
+    printf("stop time  = %zd\n", time(NULL));
     fflush(stdout);
-    
+
     error_printf("Killed, cleaning up...\n");
     atexit(atexit_flush_files);
     exit(EXIT_SUCCESS);
@@ -375,11 +375,11 @@ int main(int argc, char **argv)
     n = query_response(sockfd, buf, n, buf, 0);
     /* bit 15 enables stop_control, bit (9 downto 0) sets the stop_address */
     /* adress of 0xff will stop at pixel #238 (counting start from 0) */
-    Sleep(100);
+    msleep(500);
     n = cmd_write_register(&buf32, 3, 0x80d5);
     n = query_response(sockfd, buf, n, buf, 0);
     /* force a trigger */
-    Sleep(100);
+    msleep(500);
     n = cmd_send_pulse(&buf32, 0x01); // pulse_reg(0)
     n = query_response(sockfd, buf, n, buf, 0);
 

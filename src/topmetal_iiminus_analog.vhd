@@ -2,22 +2,22 @@
 --! @file topmetal_iiminus_analog.vhd
 --! @brief Analog scan control and SRAM config for Topmetal-II-
 ----------------------------------------------------------------------------------
--- Company: 
+-- Company:
 -- Engineer: Yuan Mei
--- 
+--
 -- Create Date:    23:56:58 1/19/2015
 -- Design Name:    Topmetal II- analog scan driver
 -- Module Name:    topmetal_iiminus_analog - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description: 
+-- Project Name:
+-- Target Devices:
+-- Tool versions:
+-- Description:
 --
--- Dependencies: 
+-- Dependencies:
 --
--- Revision: 
+-- Revision:
 -- Revision 0.01 - File Created
--- Additional Comments: 
+-- Additional Comments:
 --
 ----------------------------------------------------------------------------------
 LIBRARY IEEE;
@@ -117,7 +117,7 @@ ARCHITECTURE Behavioral OF topmetal_iiminus_analog IS
   SIGNAL driveState      : driveState_t;
   SIGNAL driveState1     : driveState_t;
 
-BEGIN 
+BEGIN
 
   bram_inst : bram_sdp_w32r8
     PORT MAP (
@@ -155,7 +155,7 @@ BEGIN
   tm_proc : PROCESS (TM_CLK_buf, RESET)
     VARIABLE stopped : std_logic;
   BEGIN
-    IF RESET = '1' OR sram_writing = '1' THEN 
+    IF RESET = '1' OR sram_writing = '1' THEN
       TM_RST_S_buf   <= '0';
       TM_START_S_buf <= '0';
       TM_SPEAK_S_buf <= '0';
@@ -168,7 +168,7 @@ BEGIN
       TM_RST_S_buf   <= '0';
       TM_START_S_buf <= '0';
       TM_SPEAK_S_buf <= '0';
-      trigger_buf    <= '0';      
+      trigger_buf    <= '0';
       CASE driveState IS
         WHEN S0 =>                      -- wait a clk cycle
           driveState <= S1;
@@ -182,7 +182,7 @@ BEGIN
           pxladdr        <= (OTHERS => '1');
           driveState     <= S4;
         WHEN S4 =>
-          IF STOP_ADDR(STOP_ADDR'length-1) = '0' THEN 
+          IF STOP_ADDR(STOP_ADDR'length-1) = '0' THEN
             TM_SPEAK_S_buf <= '1';
           ELSIF stopped = '1' THEN
             TM_SPEAK_S_buf <= '0';
@@ -193,9 +193,9 @@ BEGIN
               stopped        := '1';
             END IF;
           END IF;
-          IF trigger_cnt = unsigned(TRIGGER_RATE) AND 
-                (pxladdr = unsigned(TRIGGER_DELAY(pxladdr'length-1 DOWNTO 0))-1 OR 
-                  (pxladdr = to_unsigned(ROWS*COLS-1, pxladdr'length) AND 
+          IF trigger_cnt = unsigned(TRIGGER_RATE) AND
+                (pxladdr = unsigned(TRIGGER_DELAY(pxladdr'length-1 DOWNTO 0))-1 OR
+                  (pxladdr = to_unsigned(ROWS*COLS-1, pxladdr'length) AND
                    unsigned(TRIGGER_DELAY(pxladdr'length-1 DOWNTO 0)) = 0)) THEN
             trigger_buf <= '1';
           END IF;
@@ -274,7 +274,7 @@ BEGIN
             END IF;
           END IF;
           IF clk_cnt(1 DOWNTO 0) = "01" THEN -- tune this value to change the phase of bram_d
-            bram_addrb_cnt <= bram_addrb_cnt + 1;              
+            bram_addrb_cnt <= bram_addrb_cnt + 1;
           END IF;
         WHEN S6 =>
           TM_SPEAK_S_buf1 <= '1';

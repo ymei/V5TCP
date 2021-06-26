@@ -1165,7 +1165,7 @@ BEGIN
                        VHDCI2P(3), VHDCI2P(2), VHDCI2P(1), VHDCI2P(0));
   ads5282_0_data_n <= (VHDCI2N(7), VHDCI2N(6), VHDCI2N(5), VHDCI2N(4),
                        VHDCI2N(3), VHDCI2N(2), VHDCI2N(1), VHDCI2N(0));
-  ads5282_0_config <= config_reg(16*10-1 DOWNTO 16*8);
+  ads5282_0_config <= config_reg(16*8+31 DOWNTO 16*8);
   ads5282_0_confps <= pulse_reg(2);
   ads5282_0_reset  <= pulse_reg(3) OR reset;
   -- data decimation
@@ -1188,31 +1188,31 @@ BEGIN
 
   -- pick data from only one channel for transmission.
   ch_decim_ich <= to_integer(unsigned(config_reg(16*10+11 DOWNTO 16*10+8)));
-  -- PROCESS (fifo96_wrclk, reset)
-  --   VARIABLE i : integer RANGE 0 TO 15;
-  -- BEGIN
-  --   IF reset = '1' THEN
-  --     ch_decim_ich_q    <= (OTHERS => '0');
-  --     ch_decim_ich_wren <= '0';
-  --     i                 := 0;
-  --   ELSIF rising_edge(fifo96_wrclk) THEN
-  --     ch_decim_ich_wren <= '0';
-  --     IF fifo96_trig = '1' THEN
-  --       i := 0;
-  --     END IF;
-  --     IF ch_decim_outvalid = '1' THEN
-  --       ch_decim_ich_q(16*i+15 DOWNTO 16*i) <=
-  --         ch_decim_outdata_q(16*ch_decim_ich+15 DOWNTO 16*ch_decim_ich);
-  --       i := i + 1;
-  --     END IF;
-  --     IF i >= 6 THEN
-  --       i                 := 0;
-  --       ch_decim_ich_wren <= '1';
-  --     END IF;
-  --   END IF;
-  -- END PROCESS;
-  ch_decim_ich_q    <= ch_decim_outdata_q(ch_decim_ich_q'length-1 DOWNTO 0);
-  ch_decim_ich_wren <= ch_decim_outvalid;
+  PROCESS (fifo96_wrclk, reset)
+    VARIABLE i : integer RANGE 0 TO 15;
+  BEGIN
+    IF reset = '1' OR fifo96_trig = '1' THEN
+      ch_decim_ich_q    <= (OTHERS => '0');
+      ch_decim_ich_wren <= '0';
+      i                 := 0;
+    ELSIF rising_edge(fifo96_wrclk) THEN
+      ch_decim_ich_wren <= '0';
+      IF ch_decim_outvalid = '1' THEN
+        -- swap byte order so that the receiver (little-endian) doesn't have to reshuffle
+        ch_decim_ich_q(16*(5-i)+15 DOWNTO 16*(5-i)) <=
+            ch_decim_outdata_q(16*ch_decim_ich+ 7 DOWNTO 16*ch_decim_ich)
+          & ch_decim_outdata_q(16*ch_decim_ich+15 DOWNTO 16*ch_decim_ich+8);
+        i := i + 1;
+      END IF;
+      IF i >= 6 THEN
+        i                 := 0;
+        ch_decim_ich_wren <= '1';
+      END IF;
+    END IF;
+  END PROCESS;
+  -- pick data from ch5 to ch0
+  -- ch_decim_ich_q    <= ch_decim_outdata_q(ch_decim_ich_q'length-1 DOWNTO 0);
+  -- ch_decim_ich_wren <= ch_decim_outvalid;
   --
   cs_trig0(15 DOWNTO 0)  <= ch_decim_indata_q(15 DOWNTO 0);
   cs_trig0(31 DOWNTO 16) <= ch_decim_outdata_q(15 DOWNTO 0);

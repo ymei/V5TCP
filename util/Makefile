@@ -4,7 +4,7 @@ ARCH   = $(shell uname -m)
 CC             := gcc
 CXX            := g++
 INCLUDE        := -I.
-CFLAGS         := -Wall -O2 -std=c99 -Wpedantic
+CFLAGS         := -Wall -O2 -std=c11 -Wpedantic
 CFLAGS_32      := -m32
 SHLIB_CFLAGS   := -fPIC -shared
 SHLIB_EXT      := .so
@@ -12,6 +12,7 @@ LIBS           := -lm
 LDFLAGS        :=
 ############################# Library add-ons #################################
 TINYSCHEME_FEATURES := -DUSE_DL=1 -DUSE_MATH=1 -DUSE_ASCII_NAMES=0
+CFLAGS  += -D_GNU_SOURCE
 INCLUDE += -I/opt/local/include -I/usr/local/include -I./tinyscheme/trunk
 LIBS    += -L/opt/local/lib -L/usr/local/lib -lpthread -lhdf5
 GLLIBS   =
